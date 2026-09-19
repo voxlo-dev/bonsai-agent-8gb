@@ -142,6 +142,13 @@ without thinking) it stays under 7 904, and a 3k budget already produced plan + 
 [Reasoning](#reasoning)). The other lever, `RESERVE_TOKENS` 16000, would keep 8 192 of
 thinking but lower the trigger to 32 000 and the working room between compactions to ~16k.
 
+Re-run on the same prompt with `BUDGET` 4096 (session `2026-09-19T19-16-01`): 168 steps in
+112 minutes, and the run ended on its own (`stopReason: stop`) with no step cut off on
+`length`. 7 compactions, 8-33 steps apart, back at 14.5-19.4k each time. 6 steps hit the
+budget. The largest output was 11 441 tokens, 4k thinking plus a ~7k `write`, at 7.6k
+context where the clamp still allowed the full 12 000. The same step just below the trigger
+would be cut off, so the tool-call allowance above is a typical case, not a bound.
+
 ## Thinking in the prompt
 
 The chat template renders every earlier thinking block back into the prompt:

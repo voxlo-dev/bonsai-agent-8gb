@@ -4,7 +4,7 @@
 - **Category:** spike
 - **Importance:** medium
 - **Effort:** M
-- **Depends on:** T-012 (the GPU holds one server; its run must end first)
+- **Depends on:** none
 
 ## Why
 
