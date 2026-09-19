@@ -13,9 +13,10 @@ This repo is **not an application**. It is a reproducible setup: bash scripts th
 | `scripts/lib.sh` | Sourced first by every step; sources `config.env` and defines `log`/`warn`/`die`/`has` |
 | `scripts/{deps,build,model,pi}.sh` | One install step each, individually re-runnable and idempotent |
 | `bin/bonsai-server` | The launcher. Sources `config.env` **directly**, not through `lib.sh` |
-| `pi/pi-agents.md` | Runtime artifact, copied to `~/.pi/agent/AGENTS.md`. **Not this file** |
+| `bin/bonsai-pi` | Starts the pinned pi with `PI_CODING_AGENT_DIR` set to `PI_AGENT_DIR`, and starts/stops `bonsai-server` around it when none runs. State in `$BONSAI_HOME/run/`. Same sourcing as `bonsai-server` |
+| `pi/pi-agents.md` | Runtime artifact, copied to `$PI_AGENT_DIR/AGENTS.md`. **Not this file** |
 
-**Two consumers, one config.** `config.env` feeds both the llama-server command line and, through `scripts/pi.sh`, a JSON config written into `~/.pi/agent/`. They drift silently: the server takes its values at start, pi keeps a written copy. After changing `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, `./install.sh pi` must run again.
+**Two consumers, one config.** `config.env` feeds both the llama-server command line and, through `scripts/pi.sh`, a JSON config written into `PI_AGENT_DIR` (`$BONSAI_HOME/pi-agent`), a private pi instance that never touches `~/.pi`. They drift silently: the server takes its values at start, pi keeps a written copy. After changing `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, `./install.sh pi` must run again.
 
 **The context budget is arithmetic, not taste.** `CTX`, `MAX_TOKENS`, `RESERVE_TOKENS` and `KEEP_RECENT_TOKENS` constrain each other; getting them wrong makes pi compact on every single turn or lets it request more tokens than the window holds. The constraints and the measurements behind them are in [`docs/dev.md`](docs/dev.md#context-budget). Do not change one of them alone.
 
@@ -23,23 +24,24 @@ This repo is **not an application**. It is a reproducible setup: bash scripts th
 
 - Build: `./install.sh` (or a single step: `./install.sh build`; `FORCE=1 ./install.sh build` rebuilds)
 - Test:  **none** — there is no test framework; see Conventions
-- Run:   `bonsai-server`, then `pi` in another terminal
-- Version: unversioned; the repo pins what matters instead (`LLAMA_COMMIT`, `MODEL_REV`, `MODEL_SHA256` in `config.env`)
+- Run:   `bonsai-pi` (starts the server itself), or `bonsai-server` first to keep it running
+- Version: unversioned; the repo pins what matters instead (`LLAMA_COMMIT`, `MODEL_REV`, `MODEL_SHA256`, `PI_VERSION` in `config.env`)
 
 ## Conventions
 
 - **Every non-default choice is justified in `docs/dev.md`, with the measurement behind it.** That is the repo's actual product — the scripts are short, the reasons are not. A new flag or setting without a `docs/dev.md` entry is incomplete.
-- **Pins are deliberate.** `LLAMA_COMMIT`, `MODEL_REV` and `MODEL_SHA256` exist because the model needs a fork that mainline llama.cpp has not absorbed. Moving a pin means re-testing load and speed.
+- **Pins are deliberate.** `LLAMA_COMMIT`, `MODEL_REV` and `MODEL_SHA256` exist because the model needs a fork that mainline llama.cpp has not absorbed. Moving a pin means re-testing load and speed. `PI_VERSION` pins the compaction code the context budget was measured against; moving it means re-checking [`docs/dev.md`](docs/dev.md#context-budget).
 - **Steps stay idempotent.** Each script checks whether its work is already done and exits early.
 - **Nothing is installed into the repo.** Build output, the model and pi's config all live outside it.
+- **Nothing is installed into the user's own tools.** No global npm package, nothing under `~/.pi`: a user's existing pi keeps its providers, defaults and compaction settings.
 
 ### Verifying a change
 
 There is no test suite, and adding one was considered and declined (bash, no framework, one user). Verify by observation instead:
 
 - Server flags: start it and query `http://127.0.0.1:8080/props`, or render a conversation through `/apply-template` to see what the chat template actually produces
-- pi's config: read back `~/.pi/agent/{models,settings}.json`
-- pi's behaviour: its session logs are JSONL at `~/.pi/agent/sessions/{cwd-slug}/`, one entry per message, with `usage` token counts and `compaction` records — that is where a context problem is visible
+- pi's config: read back `$BONSAI_HOME/pi-agent/{models,settings}.json`
+- pi's behaviour: its session logs are JSONL at `$BONSAI_HOME/pi-agent/sessions/{cwd-slug}/` (sessions before the private instance: `~/.pi/agent/sessions/`), one entry per message, with `usage` token counts and `compaction` records — that is where a context problem is visible
 - `bash -n` on any script touched
 
 ### Code style

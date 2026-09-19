@@ -1,9 +1,9 @@
-<!-- bonsai-local: global guidance for pi, installed to ~/.pi/agent/AGENTS.md by scripts/pi.sh.
+<!-- bonsai-local: global guidance for pi, installed to $BONSAI_HOME/pi-agent/AGENTS.md by scripts/pi.sh.
      Not this project's AGENTS.md - that one is in the repo root. -->
 
 ## Working style
 
-You run on a 48k context window with a hard thinking budget per turn.
+You run on a small context window with a hard thinking budget per turn.
 
 - **Think short, act early.** Do not draft full implementations inside one thinking block.
   Decide the single next action, then call the tool. The code belongs in the tool call, not in the reasoning.

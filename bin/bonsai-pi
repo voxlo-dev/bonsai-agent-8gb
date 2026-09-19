@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Starts the pinned pi with its own config in PI_AGENT_DIR, set up for bonsai-server.
+# A global pi and ~/.pi are not used. Arguments go straight to pi.
+# With SERVER_AUTOSTART, starts bonsai-server in the background when none is running and stops it
+# once the last bonsai-pi session ends. Rationale: docs/dev.md#server-lifecycle.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+source "$ROOT/config.env"
+
+say() { printf '\033[1;36m==>\033[0m %s\n' "$*" >&2; }
+die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+
+[[ -x "$PI_BIN" ]] || die "pi not found at $PI_BIN - run ./install.sh pi"
+
+url="http://127.0.0.1:$PORT"
+healthy() { curl -sf -o /dev/null --max-time 2 "$url/health"; }
+alive()   { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
+
+# Sessions register under run/, guarded by a lock, so a second bonsai-pi shares the server and
+# only the last one to leave stops it. server.pid exists only for a server bonsai-pi started.
+run="$BONSAI_HOME/run"
+mkdir -p "$run/sessions"
+exec 9>"$run/lock"
+
+cleanup() {
+  flock 9
+  rm -f "$run/sessions/$$"
+  for f in "$run/sessions"/*; do [[ -e "$f" ]] && ! alive "${f##*/}" && rm -f "$f"; done
+  local pid; pid="$(cat "$run/server.pid" 2>/dev/null || true)"
+  if [[ -z "$(ls -A "$run/sessions")" ]] && alive "$pid"; then
+    say "stopping bonsai-server"
+    kill "$pid"
+    for _ in {1..20}; do alive "$pid" || break; sleep 0.5; done
+    alive "$pid" && kill -9 "$pid"
+  fi
+  alive "$pid" || rm -f "$run/server.pid"
+  flock -u 9
+}
+
+if [[ "$SERVER_AUTOSTART" == "true" ]]; then
+  flock 9
+  touch "$run/sessions/$$"
+  trap cleanup EXIT
+  trap 'exit 129' HUP
+  trap 'exit 143' TERM
+  trap 'exit 130' INT
+  pid="$(cat "$run/server.pid" 2>/dev/null || true)"
+  if ! healthy && ! alive "$pid"; then
+    say "starting bonsai-server in the background, log: $SERVER_LOG"
+    # Own session: Ctrl+C in pi must not reach the server, and closing the terminal is
+    # handled by the HUP trap above instead of killing it behind our back.
+    setsid "$ROOT/bin/bonsai-server" >"$SERVER_LOG" 2>&1 </dev/null 9>&- &
+    pid=$!
+    echo "$pid" > "$run/server.pid"
+  fi
+  flock -u 9
+
+  if ! healthy; then
+    say "waiting for the model to load"
+    for ((i = 0; i < SERVER_START_TIMEOUT; i++)); do
+      healthy && break
+      alive "$pid" || die "bonsai-server exited during start - see $SERVER_LOG"
+      sleep 1
+    done
+    healthy || die "bonsai-server not ready after ${SERVER_START_TIMEOUT}s - see $SERVER_LOG"
+  fi
+fi
+
+curl -sf --max-time 2 "$url/v1/models" | grep -q "\"$MODEL_ALIAS\"" \
+  || die "no bonsai-server with model $MODEL_ALIAS on port $PORT - start bonsai-server, or set SERVER_AUTOSTART=true"
+
+# pi handles Ctrl+C itself. Uncaught, SIGINT would also end this script without its EXIT trap;
+# caught, bash resets it for pi, which still gets it as usual.
+trap : INT
+status=0
+PI_CODING_AGENT_DIR="$PI_AGENT_DIR" "$PI_BIN" "$@" 9>&- || status=$?
+exit "$status"

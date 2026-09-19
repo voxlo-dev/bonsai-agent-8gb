@@ -1,20 +1,29 @@
 #!/usr/bin/env bash
-# Installs pi if missing and registers the server as provider "local", made the default model.
-# Merges into an existing pi config; re-run after changing CTX, PORT or MAX_TOKENS.
+# Installs the pinned pi into PI_PREFIX and writes its config into PI_AGENT_DIR: provider "local"
+# as the default model, the compaction budget, AGENTS.md. A global pi and ~/.pi stay untouched.
+# Re-run after changing CTX, PORT, MAX_TOKENS, RESERVE_TOKENS or KEEP_RECENT_TOKENS.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-if ! has pi; then
-  has npm || die "pi and npm not found - install Node.js first"
-  log "installing pi"
-  npm install -g @earendil-works/pi-coding-agent
+has npm || die "npm not found - install Node.js >= 22.19 first"
+node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a==22&&b>=19)?0:1)' \
+  || die "pi needs Node.js >= 22.19, found $(node --version)"
+
+pkg="$PI_PREFIX/node_modules/@earendil-works/pi-coding-agent/package.json"
+installed="$(node -p "require('$pkg').version" 2>/dev/null || true)"
+if [[ -x "$PI_BIN" && "$installed" == "$PI_VERSION" ]]; then
+  log "pi $PI_VERSION present"
+else
+  log "installing pi $PI_VERSION into $PI_PREFIX"
+  mkdir -p "$PI_PREFIX"
+  npm install --prefix "$PI_PREFIX" --no-fund --no-audit "@earendil-works/pi-coding-agent@$PI_VERSION"
 fi
 
-dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+dir="$PI_AGENT_DIR"
 mkdir -p "$dir"
 log "writing pi config in $dir"
 
 DIR="$dir" PORT="$PORT" ALIAS="$MODEL_ALIAS" CTX="$CTX" MAX_TOKENS="$MAX_TOKENS" \
-RESERVE_TOKENS="$RESERVE_TOKENS" KEEP_RECENT_TOKENS="$KEEP_RECENT_TOKENS" python3 - <<'EOF'
+RESERVE_TOKENS="$RESERVE_TOKENS" KEEP_RECENT_TOKENS="$KEEP_RECENT_TOKENS" python3 - <<'PY'
 import json, os
 d = os.environ["DIR"]
 
@@ -52,12 +61,7 @@ settings.setdefault("compaction", {}).update(
     keepRecentTokens=int(os.environ["KEEP_RECENT_TOKENS"]),
 )
 save("settings.json", settings)
-EOF
+PY
 
-agents="$dir/AGENTS.md"
-if [[ -e "$agents" ]] && ! grep -q "bonsai-local" "$agents"; then
-  warn "kept your own $agents - see pi/pi-agents.md for the guidance this setup expects"
-else
-  cp "$ROOT/pi/pi-agents.md" "$agents"
-  log "wrote $agents"
-fi
+cp "$ROOT/pi/pi-agents.md" "$dir/AGENTS.md"
+log "wrote $dir/AGENTS.md"

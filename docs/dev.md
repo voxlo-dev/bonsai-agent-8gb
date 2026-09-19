@@ -20,7 +20,31 @@ Architecture (`qwen35`): 64 blocks, every 4th is full attention (16 layers, 4 KV
 - **`GGML_CUDA_FA_ALL_QUANTS=ON`**: without it, CUDA flash attention only handles K and V of the *same* type. A mixed cache such as `q8_0`/`q4_0` then falls back to the CPU. Generation speed dropped from 34 to 20 tok/s at 2k context and down to 8 tok/s at 10k, with the GPU at 39 % load.
 - **gcc-13 as CUDA host compiler**: Ubuntu's CUDA 12.4 `nvcc` refuses gcc newer than 13, and newer Ubuntu releases default to gcc 15.
 - **`CMAKE_CUDA_ARCHITECTURES`** comes from `nvidia-smi` (`89` for Ada). Compiling for one architecture is much faster than for the default set.
+- **ccache** speeds up rebuilds and is used when present; the build works without it.
 - OpenSSL is not needed: it only enables HTTPS model downloads inside llama-server, and `bonsai-server` passes a local path.
+
+## Toolchain
+
+`./install.sh deps` takes everything from apt and is tested on Ubuntu 26.04 only, where
+`nvidia-cuda-toolkit` is CUDA 12.4. Known limits beyond that, not yet tested on a machine
+(see the backlog):
+
+- **Other Ubuntu releases:** 24.04 ships CUDA 12.0, whose `nvcc` accepts gcc up to 12, not the
+  gcc-13 the build picks. 22.04 ships CUDA 11.5, which does not know `sm_89` (Ada), and has no
+  `gcc-13` package.
+- **RTX 50xx** (`sm_120`) needs CUDA >= 12.8, i.e. NVIDIA's own repository. `build.sh` stops
+  early when the GPU is newer than the installed `nvcc`.
+- **Native Linux:** apt's toolkit pulls in `libnvidia-compute-*` of its own version. Under WSL2
+  that is harmless - `ldd llama-server` resolves `libcuda.so.1` to `/usr/lib/wsl/lib`, which
+  comes first in the loader path. Next to a native driver of another version it can cause a
+  driver/library version mismatch.
+- **Other GPUs:** the fork also carries `PTQ1_0` kernels for Vulkan, ROCm/HIP, Metal and the
+  CPU. This setup builds CUDA only.
+
+Disk, measured: model 5.6 GB, `llama.cpp` checkout and build 1.9 GB, ccache ~0.25 GB, apt's
+CUDA toolkit with its dependencies ~5.4 GB. The binary links `libcudart` and `libcublas`
+dynamically, so the toolkit stays after the build. pi needs Node.js >= 22.19 (`engines` in its
+`package.json`) and takes 440 MB in `$BONSAI_HOME/pi`.
 
 ## VRAM budget
 
@@ -90,7 +114,7 @@ tokens from a 48000 window. With `--no-context-shift` the server stops there; th
 
 The settings below keep the post-compaction state comfortably under the trigger and the
 worst case inside the window. `install.sh pi` writes the two compaction keys into
-`~/.pi/agent/settings.json`.
+`$BONSAI_HOME/pi-agent/settings.json`.
 
 | | Value | Constraint |
 | --- | --- | --- |
@@ -114,8 +138,8 @@ openai-completions provider writes that field back onto each assistant message. 
 session above, the 29 745-character thinking block from the first turn (~7.4k tokens) rode
 along in every later prompt.
 
-`PRESERVE_THINKING=false` passes `--chat-template-kwargs '{"preserve_thinking": false}'`,
-which keeps thinking only for messages after the last user message - the current turn.
+`PRESERVE_THINKING=false` passes `--no-reasoning-preserve` (the fork's switch for the
+template's `preserve_thinking`), which keeps thinking only for messages after the last user message - the current turn.
 Note what that does **not** cover: inside one long agent turn there is no later user
 message, so that turn's own thinking is all preserved. It pays off across turns, and after
 a compaction, since pi feeds the summary back as a `user` message (`dist/core/messages.js`)
@@ -123,7 +147,7 @@ which resets `last_query_index`.
 
 ## Telling the model to think less
 
-`~/.pi/agent/AGENTS.md`, installed from [`pi/pi-agents.md`](../pi/pi-agents.md), asks the model to
+`$BONSAI_HOME/pi-agent/AGENTS.md`, installed from [`pi/pi-agents.md`](../pi/pi-agents.md), asks the model to
 decide one action and call the tool rather than drafting code inside the thinking block.
 pi loads it into the system prompt at startup; `--append-system-prompt` and
 `--system-prompt` are the per-run equivalents. Treat it as a nudge, not a control: the
@@ -133,7 +157,49 @@ thing that reliably stops it.
 
 ## pi
 
-pi reads providers from `~/.pi/agent/models.json` (`PI_CODING_AGENT_DIR` overrides the location). `contextWindow` decides when pi compacts, together with the settings under [Context budget](#context-budget) - not `maxTokens`, which is only the per-turn output cap. Unsloth's `unsloth start pi` hard-codes `maxTokens = min(context / 4, 8192)`, which cuts a single long reasoning turn off at 8k. That is why this setup uses its own config.
+`bonsai-pi` runs a private pi: `install.sh pi` puts version `PI_VERSION` into `$BONSAI_HOME/pi`
+(`npm install --prefix`, no `-g`, no sudo), and the wrapper sets `PI_CODING_AGENT_DIR` to
+`$BONSAI_HOME/pi-agent`. pi resolves every user path through that variable (`getAgentDir()`
+in `dist/config.js`): providers, settings, `AGENTS.md`, auth, sessions.
+
+The first version wrote into the global `~/.pi/agent` instead, and collided with any pi
+already in use there:
+
+- `defaultProvider`/`defaultModel` were overwritten, so a plain `pi` started on Bonsai.
+- The compaction keys are global or per project, not per model (`settings-manager.js`).
+  A 200k model then kept 8k of recent history per compaction instead of 20k.
+- `AGENTS.md`, telling the model to think briefly on a small window, went into every
+  model's system prompt - or, when the user had their own, ours was skipped.
+- Whatever pi version was installed ran, while the budget arithmetic under
+  [Context budget](#context-budget) reads pi 0.85.1's compaction code.
+
+A project directory's own `.pi/settings.json` still applies to both instances; that is
+pi's per-project override and intended.
+
+pi reads providers from `models.json`. `contextWindow` decides when pi compacts, together with the settings under [Context budget](#context-budget) - not `maxTokens`, which is only the per-turn output cap. Unsloth's `unsloth start pi` hard-codes `maxTokens = min(context / 4, 8192)`, which cuts a single long reasoning turn off at 8k. That is why this setup uses its own config.
+
+## Server lifecycle
+
+`bonsai-pi` owns the server only when it started it. On start it checks `/health` on `PORT`;
+with no answer it launches `bonsai-server` in the background and waits until `/health`
+returns 200 (the model is loaded), at most `SERVER_START_TIMEOUT` seconds. Every run then
+checks `/v1/models` for `MODEL_ALIAS`, so pi never talks to some other server on that port.
+
+- **Shared server.** Each session registers its PID in `$BONSAI_HOME/run/sessions/` under a
+  `flock`. The last session to leave stops the server; sessions that died without cleaning
+  up are pruned by PID. `run/server.pid` exists only for a server `bonsai-pi` started, so a
+  server started by hand is never stopped.
+- **Own session (`setsid`).** The server runs outside the terminal's process group: Ctrl+C
+  in pi - which cancels a generation - must not reach llama-server, which installs its own
+  SIGINT handler and would quit.
+- **Traps.** Closing the terminal (HUP) or TERM runs the cleanup. While pi runs, the wrapper
+  catches SIGINT with a no-op: uncaught, bash would die with pi when pi exits on SIGINT and skip
+  the cleanup. While waiting for the model, Ctrl+C aborts and stops the server.
+
+Verified with a stand-in server and pi: one session, two overlapping ones, Ctrl+C caught by
+pi, pi killed by SIGINT, Ctrl+C during load, HUP, a hand-started server, and a server that
+dies during start. The cost is a model load per first session; its duration on the real
+model is not measured yet.
 
 ## Sampling
 
@@ -149,5 +215,8 @@ pi reads providers from `~/.pi/agent/models.json` (`PI_CODING_AGENT_DIR` overrid
 | Slower while a browser is visible | The browser renders on the RTX. Switch it to the iGPU in Windows graphics settings. |
 | `sudo: a terminal is required` | Run `./install.sh deps` in a real terminal, not through an agent's shell. |
 | `pi -p` hangs in scripts | pi waits on stdin without a TTY: add `< /dev/null`. |
+| `pi` talks to another model, or ignores the budget | Plain `pi` is your global instance. Start `bonsai-pi`. |
+| `bonsai-server exited during start` | Read `$BONSAI_HOME/server.log`; usually VRAM taken by another process, see `nvidia-smi`. |
+| `no bonsai-server with model ... on port` | Something else listens on `PORT`. Stop it or set another `PORT`, then `./install.sh pi`. |
 | Answer ends after exactly `MAX_TOKENS` | The output cap was hit. Raise `MAX_TOKENS` or lower `BUDGET`. |
 | pi compacts every turn, most of the time goes into summarizing | `RESERVE_TOKENS`/`KEEP_RECENT_TOKENS` are unset or too large for `CTX`: `./install.sh pi`. See [Context budget](#context-budget). |

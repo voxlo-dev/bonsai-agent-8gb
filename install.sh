@@ -4,8 +4,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/scripts/lib.sh"
 
 link() {
   mkdir -p "$HOME/.local/bin"
-  ln -sf "$ROOT/bin/bonsai-server" "$HOME/.local/bin/bonsai-server"
-  log "linked bonsai-server into ~/.local/bin"
+  for b in bonsai-server bonsai-pi; do ln -sf "$ROOT/bin/$b" "$HOME/.local/bin/$b"; done
+  log "linked bonsai-server and bonsai-pi into ~/.local/bin"
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || warn "~/.local/bin is not on PATH"
 }
 
@@ -19,4 +19,4 @@ for s in "${steps[@]}"; do
     *) die "unknown step '$s' (deps build model pi link)" ;;
   esac
 done
-log "done - start the server with: bonsai-server"
+log "done - start the server with: bonsai-server, then bonsai-pi in another terminal"

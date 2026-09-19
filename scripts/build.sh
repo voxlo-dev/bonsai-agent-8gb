@@ -18,8 +18,17 @@ cd "$LLAMA_DIR"
 git fetch -q --depth 1 origin "$LLAMA_COMMIT"
 git checkout -q --force FETCH_HEAD
 
-arch="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d '.')"
+arch="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.')" || true
 [[ "$arch" =~ ^[0-9]+$ ]] || arch=native
+
+# nvcc before 12.8 does not know Blackwell (sm_120, RTX 50xx) and fails mid-build
+nvcc_ver="$(nvcc --version | sed -n 's/.*release \([0-9]*\.[0-9]*\).*/\1/p')"
+if [[ "$arch" =~ ^[0-9]+$ ]] && ((arch >= 100)) && [[ "$(printf '%s\n' 12.8 "$nvcc_ver" | sort -V | head -1)" != 12.8 ]]; then
+  die "GPU arch sm_$arch needs CUDA >= 12.8, found nvcc $nvcc_ver - see docs/dev.md#toolchain"
+fi
+
+launchers=()
+has ccache && launchers=(-DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache)
 
 compilers=()
 if has g++-13; then
@@ -33,7 +42,7 @@ cmake -B build -S . \
   -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="$arch" "${compilers[@]}" \
   -DGGML_CUDA_FA_ALL_QUANTS=ON \
   -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=ON -DLLAMA_CURL=OFF \
-  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
+  "${launchers[@]}" \
   >/dev/null
 
 log "building llama-server (takes a while)"

@@ -22,7 +22,7 @@ old `reasoning_content`. **The actual compaction rate under load is not verified
 ## What
 
 Run a full agentic task against the server and count `compaction` entries in the resulting
-session log at `~/.pi/agent/sessions/{cwd-slug}/*.jsonl`.
+session log at `$BONSAI_HOME/pi-agent/sessions/{cwd-slug}/*.jsonl` (runs started before the private pi instance: `~/.pi/agent/sessions/`).
 
 Target: at most one compaction per 2-4 agent steps, against one per turn before. Also check
 that `input` on the request following a compaction drops well below the trigger
