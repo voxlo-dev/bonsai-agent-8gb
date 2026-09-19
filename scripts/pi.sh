@@ -13,7 +13,8 @@ dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 mkdir -p "$dir"
 log "writing pi config in $dir"
 
-DIR="$dir" PORT="$PORT" ALIAS="$MODEL_ALIAS" CTX="$CTX" MAX_TOKENS="$MAX_TOKENS" python3 - <<'EOF'
+DIR="$dir" PORT="$PORT" ALIAS="$MODEL_ALIAS" CTX="$CTX" MAX_TOKENS="$MAX_TOKENS" \
+RESERVE_TOKENS="$RESERVE_TOKENS" KEEP_RECENT_TOKENS="$KEEP_RECENT_TOKENS" python3 - <<'EOF'
 import json, os
 d = os.environ["DIR"]
 
@@ -43,5 +44,20 @@ save("models.json", models)
 
 settings = load("settings.json")
 settings.update(defaultProvider="local", defaultModel=os.environ["ALIAS"])
+# pi's defaults (reserve 16384, keepRecent 20000) assume a 200k window. At 48k they leave
+# ~8k of working room and the post-compaction context stays above the trigger, so pi
+# compacts on every turn. See docs/dev.md#context-budget.
+settings.setdefault("compaction", {}).update(
+    reserveTokens=int(os.environ["RESERVE_TOKENS"]),
+    keepRecentTokens=int(os.environ["KEEP_RECENT_TOKENS"]),
+)
 save("settings.json", settings)
 EOF
+
+agents="$dir/AGENTS.md"
+if [[ -e "$agents" ]] && ! grep -q "bonsai-local" "$agents"; then
+  warn "kept your own $agents - see pi/pi-agents.md for the guidance this setup expects"
+else
+  cp "$ROOT/pi/pi-agents.md" "$agents"
+  log "wrote $agents"
+fi

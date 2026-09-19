@@ -24,7 +24,7 @@ The default runs every step in order. Name one or more steps to run just those:
 | `deps` | apt toolchain: build tools, cmake, gcc-13, CUDA toolkit (asks for sudo, so run it in a real terminal) |
 | `build` | clones the fork at the pinned commit and builds `llama-server` (`FORCE=1` rebuilds) |
 | `model` | links the GGUF from the Hugging Face cache, or downloads and checksums it |
-| `pi` | installs pi if missing, adds provider `local` and makes it the default |
+| `pi` | installs pi if missing, adds provider `local`, makes it the default and writes `~/.pi/agent/AGENTS.md` |
 | `link` | puts `bonsai-server` into `~/.local/bin` |
 
 Everything lands in `~/.local/share/bonsai-local` (`BONSAI_HOME`).
@@ -54,10 +54,15 @@ bonsai-server --port 9000
 | `KV_K` / `KV_V` | `q8_0` / `q4_0` | KV cache types for keys and values |
 | `EFFORT` | `medium` | chat-template reasoning effort: `low`, `medium`, `xhigh` |
 | `BUDGET` | `8192` | thinking tokens per turn, `-1` for unlimited |
-| `MAX_TOKENS` | `24000` | pi's output cap per turn |
+| `PRESERVE_THINKING` | `false` | keep earlier turns' thinking in the prompt |
+| `MAX_TOKENS` | `12000` | pi's output cap per turn |
+| `RESERVE_TOKENS` | `12000` | window pi holds back for the answer; it compacts above `CTX - RESERVE_TOKENS` |
+| `KEEP_RECENT_TOKENS` | `8000` | recent history a compaction keeps |
 | `PORT` | `8080` | server port |
 
-After changing `CTX`, `PORT` or `MAX_TOKENS`, run `./install.sh pi` again so pi's `contextWindow` matches the server.
+After changing `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, run `./install.sh pi` again so pi's config matches the server.
+
+The last three carry each other: pi's own defaults assume a 200k window and make it compact on every single turn at 48k. [Context budget](docs/dev.md#context-budget) has the measurements and the constraints between them.
 
 ## Performance
 

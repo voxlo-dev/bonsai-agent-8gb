@@ -58,9 +58,82 @@ The effort level barely matters. The hard budget is what works: `--reasoning-bud
 
 Do not enable pi's thinking levels for this model (`"reasoning": true` in `models.json`). pi would send levels such as `high` or `minimal`, which the template rejects with an exception. The server sets the level.
 
+## Context budget
+
+pi's compaction defaults assume a 200k window. On 48k they produce an endless compaction
+loop. From `dist/core/compaction/compaction.js` and `settings-manager.js`:
+
+- `shouldCompact`: `contextTokens > contextWindow - reserveTokens`, default `reserveTokens` 16384
+- `keepRecentTokens` default 20000, estimated as `chars/4` over the messages only - the
+  system prompt and the tool schemas are not counted, and chars/4 underestimates code and
+  JSON tool arguments
+
+Measured on a full-stack game prompt (session `2026-09-19T16-24-33`, 30 entries, 31 minutes):
+
+| Compaction | tokensBefore | input of the next request |
+| --- | --- | --- |
+| 1 | 33 229 | 33 524 |
+| 2 | 39 087 | 32 272 |
+| 3 | 33 963 | 32 476 |
+| 4 | 35 026 | - |
+
+The trigger sat at 48000 - 16384 = **31 616**, and the context never came back below it:
+those "20 000" kept tokens really were ~30 000. The first compaction cut at the very first
+assistant message and freed nothing at all. pi then compacted on every single turn, at a
+cost of one summarization call (2.3-3.8k tokens at ~30 tok/s) plus a full prompt
+reprocess - `cacheRead` drops to 0 after a compaction - of ~33k at ~400 tok/s. Roughly a
+third of that session went into compaction, and the task never finished.
+
+A second, latent fault: `maxTokens` 24000 plus a 31 616 trigger let pi request 55 616
+tokens from a 48000 window. With `--no-context-shift` the server stops there; the
+`2026-09-19T15-32-43` session shows a `stopReason: length`.
+
+The settings below keep the post-compaction state comfortably under the trigger and the
+worst case inside the window. `install.sh pi` writes the two compaction keys into
+`~/.pi/agent/settings.json`.
+
+| | Value | Constraint |
+| --- | --- | --- |
+| `RESERVE_TOKENS` | 12000 | >= the largest single turn's output (11 227 measured) |
+| `MAX_TOKENS` | 12000 | `CTX - RESERVE + MAX_TOKENS <= CTX`, so exactly 48000 |
+| `KEEP_RECENT_TOKENS` | 8000 | real cost ~1.4x, so ~16k in use against a 36 000 trigger |
+
+That leaves ~20k of working room, two to four agent steps per compaction instead of one.
+
+## Thinking in the prompt
+
+The chat template renders every earlier thinking block back into the prompt:
+
+```jinja
+{%- if preserve_thinking is undefined or preserve_thinking is true or loop.index0 > ns.last_query_index %}
+    {{- '<|im_start|>' + message.role + '\n<think>\n' + reasoning_content + '\n</think>\n\n' + content }}
+```
+
+pi sends them: its thinking blocks carry `thinkingSignature: "reasoning_content"`, and the
+openai-completions provider writes that field back onto each assistant message. In the
+session above, the 29 745-character thinking block from the first turn (~7.4k tokens) rode
+along in every later prompt.
+
+`PRESERVE_THINKING=false` passes `--chat-template-kwargs '{"preserve_thinking": false}'`,
+which keeps thinking only for messages after the last user message - the current turn.
+Note what that does **not** cover: inside one long agent turn there is no later user
+message, so that turn's own thinking is all preserved. It pays off across turns, and after
+a compaction, since pi feeds the summary back as a `user` message (`dist/core/messages.js`)
+which resets `last_query_index`.
+
+## Telling the model to think less
+
+`~/.pi/agent/AGENTS.md`, installed from [`pi/pi-agents.md`](../pi/pi-agents.md), asks the model to
+decide one action and call the tool rather than drafting code inside the thinking block.
+pi loads it into the system prompt at startup; `--append-system-prompt` and
+`--system-prompt` are the per-run equivalents. Treat it as a nudge, not a control: the
+measurements under [Reasoning](#reasoning) show this model ignores instructions about
+thinking length, including the template's own effort levels. `BUDGET` remains the only
+thing that reliably stops it.
+
 ## pi
 
-pi reads providers from `~/.pi/agent/models.json` (`PI_CODING_AGENT_DIR` overrides the location). `contextWindow` decides when pi compacts. `maxTokens` is the per-turn output cap, and pi reserves that much of the window for the answer. Unsloth's `unsloth start pi` hard-codes `maxTokens = min(context / 4, 8192)`, which cuts a single long reasoning turn off at 8k. That is why this setup uses its own config.
+pi reads providers from `~/.pi/agent/models.json` (`PI_CODING_AGENT_DIR` overrides the location). `contextWindow` decides when pi compacts, together with the settings under [Context budget](#context-budget) - not `maxTokens`, which is only the per-turn output cap. Unsloth's `unsloth start pi` hard-codes `maxTokens = min(context / 4, 8192)`, which cuts a single long reasoning turn off at 8k. That is why this setup uses its own config.
 
 ## Sampling
 
@@ -77,3 +150,4 @@ pi reads providers from `~/.pi/agent/models.json` (`PI_CODING_AGENT_DIR` overrid
 | `sudo: a terminal is required` | Run `./install.sh deps` in a real terminal, not through an agent's shell. |
 | `pi -p` hangs in scripts | pi waits on stdin without a TTY: add `< /dev/null`. |
 | Answer ends after exactly `MAX_TOKENS` | The output cap was hit. Raise `MAX_TOKENS` or lower `BUDGET`. |
+| pi compacts every turn, most of the time goes into summarizing | `RESERVE_TOKENS`/`KEEP_RECENT_TOKENS` are unset or too large for `CTX`: `./install.sh pi`. See [Context budget](#context-budget). |
