@@ -122,7 +122,20 @@ worst case inside the window. `install.sh pi` writes the two compaction keys int
 | `MAX_TOKENS` | 12000 | `CTX - RESERVE + MAX_TOKENS <= CTX`, so exactly 48000 |
 | `KEEP_RECENT_TOKENS` | 8000 | real cost ~1.4x, so ~16k in use against a 36 000 trigger |
 
-That leaves ~20k of working room, two to four agent steps per compaction instead of one.
+That leaves ~20k of working room.
+
+Measured on the same prompt with these settings (session `2026-09-19T17-24-22`, 79 agent
+steps, 89 minutes): 5 compactions, with 13, 18, 12, 19, 5 and 12 steps between them -
+against one per step before. Each fired at 36 974-37 513 tokens, and the next request came
+back at 15.2-18.6k, less than half the trigger. The run ended on something else, below.
+
+**pi caps the output near the trigger.** pi sends `max_tokens` as
+`min(maxTokens, contextWindow - estimated context - 4096)` (`clampMaxTokensToContext`,
+`CONTEXT_SAFETY_TOKENS` = 4096). Just below the trigger that leaves
+`RESERVE_TOKENS - 4096` = 7 904 tokens, less than `BUDGET` (8192). The last step of that
+session sat at 35 861 tokens, got `max_tokens` 8 334, spent 8 192 of it thinking, and was cut
+off with `stopReason: length` before its tool call, which ended the agent loop. So the real
+constraint is `BUDGET + answer <= RESERVE_TOKENS - 4096`, see T-012.
 
 ## Thinking in the prompt
 
@@ -198,8 +211,16 @@ checks `/v1/models` for `MODEL_ALIAS`, so pi never talks to some other server on
 
 Verified with a stand-in server and pi: one session, two overlapping ones, Ctrl+C caught by
 pi, pi killed by SIGINT, Ctrl+C during load, HUP, a hand-started server, and a server that
-dies during start. The cost is a model load per first session; its duration on the real
-model is not measured yet.
+dies during start. With the real model:
+
+- The first session waits for the load: `model loaded` after 7.7-7.9 s, the same with the
+  model file evicted from the page cache (`posix_fadvise DONTNEED`). A one-line `bonsai-pi -p`
+  takes 14 s end to end. `SERVER_START_TIMEOUT` 300 has ample margin on this machine.
+- llama-server exits on SIGTERM within ~1 s, and VRAM goes from 7 275 MiB back to 0.
+- Two overlapping sessions share one server; the last to end stops it.
+- SIGINT to one session's process group mid-generation: pi aborts its request (the server
+  logs `cancel task`), the server keeps running and answers the other session.
+- `run/` holds no session and no `server.pid` after each run.
 
 ## Sampling
 
