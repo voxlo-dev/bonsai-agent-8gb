@@ -135,7 +135,12 @@ back at 15.2-18.6k, less than half the trigger. The run ended on something else,
 `RESERVE_TOKENS - 4096` = 7 904 tokens, less than `BUDGET` (8192). The last step of that
 session sat at 35 861 tokens, got `max_tokens` 8 334, spent 8 192 of it thinking, and was cut
 off with `stopReason: length` before its tool call, which ended the agent loop. So the real
-constraint is `BUDGET + answer <= RESERVE_TOKENS - 4096`, see T-012.
+constraint is `BUDGET + tool call <= RESERVE_TOKENS - 4096`.
+
+`BUDGET` is therefore 4096: with a tool call of up to ~3.3k (the largest write measured
+without thinking) it stays under 7 904, and a 3k budget already produced plan + code (see
+[Reasoning](#reasoning)). The other lever, `RESERVE_TOKENS` 16000, would keep 8 192 of
+thinking but lower the trigger to 32 000 and the working room between compactions to ~16k.
 
 ## Thinking in the prompt
 
@@ -240,4 +245,5 @@ dies during start. With the real model:
 | `bonsai-server exited during start` | Read `$BONSAI_HOME/server.log`; usually VRAM taken by another process, see `nvidia-smi`. |
 | `no bonsai-server with model ... on port` | Something else listens on `PORT`. Stop it or set another `PORT`, then `./install.sh pi`. |
 | Answer ends after exactly `MAX_TOKENS` | The output cap was hit. Raise `MAX_TOKENS` or lower `BUDGET`. |
+| `stopReason: length` well below `MAX_TOKENS`, near a compaction | pi's output clamp: `BUDGET` too large for `RESERVE_TOKENS - 4096`. See [Context budget](#context-budget). |
 | pi compacts every turn, most of the time goes into summarizing | `RESERVE_TOKENS`/`KEEP_RECENT_TOKENS` are unset or too large for `CTX`: `./install.sh pi`. See [Context budget](#context-budget). |

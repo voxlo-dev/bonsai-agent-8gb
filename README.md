@@ -57,7 +57,7 @@ All settings live in [`config.env`](config.env). A variable set in the environme
 
 ```bash
 CTX=64000 bonsai-server
-BUDGET=4096 EFFORT=low bonsai-server
+BUDGET=3072 EFFORT=low bonsai-server
 bonsai-server --port 9000
 ```
 
@@ -66,7 +66,7 @@ bonsai-server --port 9000
 | `CTX` | `48000` | context window in tokens |
 | `KV_K` / `KV_V` | `q8_0` / `q4_0` | KV cache types for keys and values |
 | `EFFORT` | `medium` | chat-template reasoning effort: `low`, `medium`, `xhigh` |
-| `BUDGET` | `8192` | thinking tokens per turn, `-1` for unlimited |
+| `BUDGET` | `4096` | thinking tokens per turn; with `RESERVE_TOKENS` 12000 at most ~5k, see [Context budget](docs/dev.md#context-budget) |
 | `PRESERVE_THINKING` | `false` | keep earlier turns' thinking in the prompt |
 | `MAX_TOKENS` | `12000` | pi's output cap per turn |
 | `RESERVE_TOKENS` | `12000` | window pi holds back for the answer; it compacts above `CTX - RESERVE_TOKENS` |
