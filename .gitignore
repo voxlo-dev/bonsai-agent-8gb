@@ -1,0 +1,39 @@
+# OS cruft
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+
+# Environment / secrets
+.env
+.env.local
+*.local
+
+# Chat handouts (`checkpoint` skill) and other local-only notes
+*.local.md
+
+# Logs
+*.log
+
+# Disposable working files: e2e output (screenshots, traces, throwaway scripts) and dispatch
+# briefs, reports and transcripts. Cleared at close-sprint; safe to delete at any time.
+.temp/
+
+# Headroom
+.tokensave
+
+# Build output / dependencies (uncomment / extend per stack)
+# node_modules/
+# dist/
+# build/
+# target/
+# bin/
+# obj/
+
+# Domain-specific entries are added by project-initialiser.

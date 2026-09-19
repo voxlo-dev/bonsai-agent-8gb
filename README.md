@@ -78,7 +78,7 @@ VRAM stays at ~7.3 GB: the KV cache is allocated in full at start.
 
 ## More
 
-[docs/dev.md](docs/dev.md) explains every non-default choice, with the measurements behind it, plus troubleshooting.
+[docs/dev.md](docs/dev.md) explains every non-default choice, with the measurements behind it, plus troubleshooting. Contributors and AI agents start at [AGENTS.md](AGENTS.md).
 
 ## Uninstall
 
