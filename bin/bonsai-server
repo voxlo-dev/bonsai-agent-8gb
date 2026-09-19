@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Starts Ternary-Bonsai-2-27B on the PrismML llama.cpp fork with the settings from config.env.
+# Extra arguments go straight to llama-server and override the defaults. Rationale: docs/dev.md.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+source "$ROOT/config.env"
+
+[[ -x "$LLAMA_SERVER" ]] || { echo "llama-server not found at $LLAMA_SERVER - run ./install.sh" >&2; exit 1; }
+[[ -f "$MODEL_PATH" ]] || { echo "model not found at $MODEL_PATH - run ./install.sh model" >&2; exit 1; }
+
+exec "$LLAMA_SERVER" -m "$MODEL_PATH" \
+  --host "$LISTEN_HOST" --port "$PORT" --alias "$MODEL_ALIAS" \
+  -c "$CTX" -ngl 99 --fit off -fa on \
+  --cache-type-k "$KV_K" --cache-type-v "$KV_V" \
+  --parallel 1 --no-context-shift \
+  --jinja --reasoning on --reasoning-effort "$EFFORT" \
+  --reasoning-budget "$BUDGET" --reasoning-budget-message "$BUDGET_MSG" \
+  --temp 1.0 --top-p 0.95 --top-k 20 \
+  "$@"
