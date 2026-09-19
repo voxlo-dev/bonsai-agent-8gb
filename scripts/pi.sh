@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Installs the pinned pi into PI_PREFIX and writes its config into PI_AGENT_DIR: provider "local"
-# as the default model, the compaction budget, AGENTS.md. A global pi and ~/.pi stay untouched.
+# as the default model, the compaction budget, AGENTS.md, the localagent extension with its workflow.
+# A global pi and ~/.pi stay untouched.
 # Re-run after changing CTX, PORT, MAX_TOKENS, RESERVE_TOKENS or KEEP_RECENT_TOKENS.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -65,3 +66,11 @@ PY
 
 cp "$ROOT/pi/pi-agents.md" "$dir/AGENTS.md"
 log "wrote $dir/AGENTS.md"
+
+# Replaced whole, so an agent or template removed from the repo does not linger.
+ext="$dir/extensions/localagent"
+rm -rf "$ext"
+mkdir -p "$ext"
+cp "$ROOT"/pi/extensions/localagent/*.ts "$ext/"
+cp -r "$ROOT/pi/localagent-workflow" "$ext/workflow"
+log "wrote the localagent extension to $ext"

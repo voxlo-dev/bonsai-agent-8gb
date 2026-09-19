@@ -227,6 +227,70 @@ dies during start. With the real model:
   logs `cancel task`), the server keeps running and answers the other session.
 - `run/` holds no session and no `server.pid` after each run.
 
+## localagent workflow
+
+`pi/localagent-workflow/` is a multi-agent build (plan gate, per-unit TDD loop behind a
+test/implementation wall, e2e and docs) written for OpenCode. Its skill and the orchestrator prompt
+describe pi now: no agent registration, `dispatch({ agent, brief })` as the only way to start an
+agent, template paths passed absolute, the wall drop as naming test paths in the brief. The protocol
+itself - phases, gates, who fixes what - is unchanged; `codegraph`, which this setup does not have,
+is gone from the agent prompts. The agent frontmatter keeps the OpenCode dialect. `bonsai-pi --localagent`
+runs it on pi through the extension in `pi/extensions/localagent/`, which `install.sh pi` copies
+with the workflow into `$PI_AGENT_DIR/extensions/localagent/`. Without the flag the extension
+registers nothing.
+
+**Own extension, not pi-subagents.** [pi-subagents](https://pi.dev/packages/pi-subagents) 0.69.0
+was tried first, installed into a scratch agent dir against a stand-in endpoint:
+
+- Parent prompt with it: 31.3k chars (system prompt + tool schemas), without it 5.8k. The
+  `subagent` tool alone is 18.9k chars, of which 13.8k is a parameter schema that none of its
+  `toolDescriptionMode`s shortens; a minimal custom description still left 29.1k. The
+  orchestrator needs `{agent, brief}`.
+- It checks `permission:` per tool only (`read: deny`), no path globs, so it rejects the
+  implementer's OpenCode block as an invalid agent definition.
+- Its builtin `worker` answers to the alias `implementer`: a small model that drops the
+  `localagent-` prefix would reach an agent without the wall.
+
+With this extension the parent prompt is 12.3k chars against 6.8k without the flag: 764 for
+the `dispatch` tool, the rest the orchestrator prompt and the skill entry - the workflow itself.
+
+**Each agent is a separate `pi -p` process** (the pattern of pi's own
+`examples/extensions/subagent`), started from pi's own entry point so it runs the pinned version:
+
+- `--no-extensions --no-skills --no-prompt-templates --no-context-files`: nothing the orchestrator
+  loaded reaches it, not `AGENTS.md`, not `dispatch` (no nested dispatch). The brief is its
+  whole context, as the workflow demands. pi's base prompt stays: the agent prompt is appended
+  (`--append-system-prompt`), since the base prompt explains the tools to a small model.
+- Dispatches are queued, one at a time: the server has one slot (`--parallel 1`), and the
+  workflow requires the sequential shape anyway.
+- The result is the agent's status line (`DONE`, `ESCALATE`, `BLOCKED`, `PASS`,
+  `FIXES_REQUIRED`, `NO_SURFACE`), the last one in its final message, so a chatty reply does not
+  fill the orchestrator's window. A child that ends on anything but `stop` - `length` included,
+  see [Context budget](#context-budget) - or exits non-zero comes back as a tool error, which
+  the workflow treats as `BLOCKED`.
+- Its session goes to `sessions/{cwd-slug}/dispatch/{orchestrator-session-id}/`, beside the
+  orchestrator's own log.
+
+**The wall** is `wall.ts`, loaded only into agents whose definition carries an OpenCode
+`permission.read` block with `deny` entries - the implementer. Those globs are the wall, read
+from the agent file, so the list has one home. It blocks `read` (and `grep`/`find`/`ls`, when
+active) on matching paths relative to the project; a directory counts when its contents would.
+`bash` stays open, as in OpenCode: running the tests is the point, and the workflow says so
+("one restriction is enforced; everything else is prompt"). The wall drop needs no switch: a
+test path the brief names explicitly stays readable (relative or absolute, sentence punctuation
+stripped), and the workflow puts test paths in the brief exactly when it drops the wall.
+
+**Flag order.** pi hands an unknown flag the next argument as its value when that argument does
+not start with `-`. Extension flags count as unknown there, so `bonsai-pi --localagent "task"`
+swallows the task. Use `bonsai-pi --localagent` and type the task, or `--localagent -p "task"`.
+
+Verified against a scripted stand-in endpoint that plays orchestrator and implementer: without
+the flag no `dispatch` and no skill; with it the orchestrator prompt and the skill are in the
+system prompt, the child has no `dispatch` and no `AGENTS.md`, its `read` of a test file is
+blocked with the wall's message, the same read passes when the brief names the file, and the
+orchestrator gets `DONE src/foo.ts` from a reply that wraps it in prose. Not yet run against
+the model: [T-013](../backlog/T-013-localagent-first-run.md).
+
 ## Sampling
 
 `--temp 1.0 --top-p 0.95 --top-k 20` follows the model card. Speculative decoding (`--spec-default`) is off: it accepted 3–10 % of drafted tokens on this model.

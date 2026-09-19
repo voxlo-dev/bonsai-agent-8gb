@@ -15,6 +15,8 @@ This repo is **not an application**. It is a reproducible setup: bash scripts th
 | `bin/bonsai-server` | The launcher. Sources `config.env` **directly**, not through `lib.sh` |
 | `bin/bonsai-pi` | Starts the pinned pi with `PI_CODING_AGENT_DIR` set to `PI_AGENT_DIR`, and starts/stops `bonsai-server` around it when none runs. State in `$BONSAI_HOME/run/`. Same sourcing as `bonsai-server` |
 | `pi/pi-agents.md` | Runtime artifact, copied to `$PI_AGENT_DIR/AGENTS.md`. **Not this file** |
+| `pi/extensions/localagent/` | pi extension behind `bonsai-pi --localagent`: the `dispatch` tool and the test wall. Copied with the workflow into `$PI_AGENT_DIR/extensions/localagent/` |
+| `pi/localagent-workflow/` | The workflow it runs (skill, seven agent prompts, templates). Written for OpenCode, its setup and dispatch parts adapted to pi |
 
 **Two consumers, one config.** `config.env` feeds both the llama-server command line and, through `scripts/pi.sh`, a JSON config written into `PI_AGENT_DIR` (`$BONSAI_HOME/pi-agent`), a private pi instance that never touches `~/.pi`. They drift silently: the server takes its values at start, pi keeps a written copy. After changing `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, `./install.sh pi` must run again.
 

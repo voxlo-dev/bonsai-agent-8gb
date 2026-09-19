@@ -2,7 +2,7 @@
 
 Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
 
-**Next ticket: `T-013`**
+**Next ticket: `T-014`**
 
 ## Draft
 
@@ -17,3 +17,4 @@ Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
 - [`T-009`](T-009-ram-and-build-memory.md) Measure system RAM needs — build and serve · chore · low · S
 - [`T-010`](T-010-other-gpu-backends.md) Try the fork's non-CUDA backends — Vulkan/ROCm at usable speed? · spike · low · M
 - [`T-012`](T-012-budget-vs-output-clamp.md) Fit the thinking budget under pi's output clamp — near the trigger pi allows 7 904 tokens, BUDGET is 8 192 · fix · high · S
+- [`T-013`](T-013-localagent-first-run.md) Run the localagent workflow on Bonsai — one small feature through `bonsai-pi --localagent`, where does a 27B model break the pipeline · spike · medium · M
