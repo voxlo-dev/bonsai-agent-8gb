@@ -51,8 +51,9 @@ dynamically, so the toolkit stays after the build. pi needs Node.js >= 22.19 (`e
 
 CUDA is a choice here, not a constraint of the model: the fork carries `PTQ1_0` kernels for
 Vulkan, ROCm/HIP, Metal and the CPU. The Vulkan path was built and measured on an AMD RX 570
-(Polaris10/gfx803, 8 GiB, RADV) so the choice rests on numbers. Logs and scripts:
-`runs/T-010-vulkan-rx570/`.
+(Polaris10/gfx803, 8 GiB, RADV) so the choice rests on numbers - first as the fork ships it
+(T-010, `runs/T-010-vulkan-rx570/`), then with a rewritten PTQ1_0 decode (T-016,
+`runs/T-016-ptq1_0-vulkan-decode/`, patch and logs there).
 
 **It works.** `-DGGML_VULKAN=ON` builds clean, every shader passes `glslc`, the server puts all
 layers on the Vulkan device, `q8_0`/`q4_0` KV with `-fa on` is accepted (`fa_kv_ok` lists both
@@ -60,16 +61,53 @@ and only requires BF16 to match on both sides), and load takes 8 s. PTQ1_0 has t
 set - `mul_mat_vec` for generation and the scalar `CREATE_MM` matmul a device without cooperative
 matrix takes. coopmat2 is deliberately absent for PTQ1_0 and is NVIDIA-only anyway.
 
-**It is about 20x too slow, best case.** At 48k, Mesa 26.1.2, `RADV_PERFTEST=nogttspill`:
+**As shipped it is about 20x too slow; with the T-016 decode about 5x.** At 48k, Mesa 26.1.2,
+`RADV_PERFTEST=nogttspill`, clocks `auto`:
 
-| | RX 570 / Vulkan | RTX 4060 Ti / CUDA |
-| --- | --- | --- |
-| prompt processing | 3.8 tok/s | 451 tok/s |
-| generation | 1.58 tok/s | 36 tok/s |
+| | RX 570, shipped kernel | RX 570, T-016 decode | RTX 4060 Ti / CUDA |
+| --- | --- | --- | --- |
+| prompt processing | 3.8 tok/s | 54 tok/s (847-token prompt) | 451 tok/s |
+| generation | 1.58 tok/s (633 ms/token) | 7.0 tok/s (143 ms/token) | 36 tok/s |
 
-**The environment is worth 1.76x, and getting it wrong looks like a kernel problem.** The first
-run, on Debian 13's Mesa 25.0.7 with clocks on `auto`, gave 0.94 tok/s. Three things moved it,
-measured one at a time at 16k:
+**The kernel was the ceiling, and the decode was the kernel.** `ptq1_0.glsl` as shipped
+decoded every weight element on its own: one byte load, a three-way range branch and a loop
+of up to four dependent multiply-mask steps (`v = (v*3) & 0xFF`, ~2.5 on average) to reach the
+wanted base-3 digit, because PTQ1_0 packs five trits per byte. Per 128-element block that is
+128 byte loads and ~320 serial ALU ops where Q4_0 loads one word per four elements and shifts.
+The same card runs Qwen2.5-3B `Q4_K_M` at 121 GB/s effective, which for 5.4 GB of weights would
+be ~22 tok/s; 1.58 meant the kernel was ~14x worse per byte, i.e. ALU-bound, which is also why
+the memory clock never ramped (the DPM governor watches memory traffic and saw none). The
+fork's own issue [#185](https://github.com/PrismML-Eng/llama.cpp/issues/185) has this kernel as
+committed-untested and slow: 0.7 tok/s on a Radeon 860M, ~9 tok/s on an RX 9070 XT.
+
+The T-016 rewrite replaces the recurrence with a 256-entry table, byte to five trits, generated
+from the CPU codec in `ggml-quants.c` so it is bit-exact by construction, held in shared memory
+through the same `init_iq_shmem` mechanism the IQ grids use, with each trit stored as a 2-bit
+two's-complement field so one `bitfieldExtract` yields the signed value. The block is read
+through a `block_ptq1_0_packed32` view (seven 32-bit words), so four consecutive elements
+(`mul_mat_vec`) cost one word load and eight (`mul_mm`) cost two. The element-to-byte mapping
+lives in one function, `ptq1_0_locate`, used by every consumer. Verified with
+`test-backend-ops -b Vulkan0 -p ptq1_0` for `MUL_MAT`, `MUL_MAT_ID`, `GET_ROWS` and `CPY`
+against the CPU backend, before and after. What it bought, 16k and 48k identical:
+
+| Path | before | after | Gain |
+| --- | --- | --- | --- |
+| generation (`mul_mat_vec`) | 632.96 ms/token | 142.56 ms/token | 4.4x |
+| prompt, 847 tokens (`mul_mm`) | 3.8 tok/s | 54.0 tok/s | 14x |
+
+Two things the numbers say about what is left. The memory clock now ramps on its own (1000 to
+1750 MHz during generation, where the shipped kernel sat at 300), so the kernel has become
+visible as memory traffic; and 143 ms/token is still ~3x the ~45 ms that Q4_K_M's per-byte
+efficiency would allow, so it is not bandwidth-bound yet. The remaining ALU cost is structural:
+`mul_mat_vec` hands each thread four consecutive elements, which is one trit position of four
+bytes, so every byte is loaded and looked up five times per token. A dedicated PTQ1_0 mat-vec
+kernel that keeps all five trits of a loaded word (the way the K-quant `mul_mat_vec_*` shaders
+own their block layout) is the next step, and a larger one; the ceiling for it is ~22 tok/s.
+Polaris has no integer-dot instruction, so the `mul_mat_vecq` route is not available here.
+
+**The environment is worth 1.76x on the shipped kernel, and getting it wrong looks like a kernel
+problem.** The first run, on Debian 13's Mesa 25.0.7 with clocks on `auto`, gave 0.94 tok/s.
+Three things moved it, measured one at a time at 16k:
 
 | Change | ms/token | Gain |
 | --- | --- | --- |
@@ -98,26 +136,19 @@ measured one at a time at 16k:
   change, not a setting. It would buy nothing either: a row lookup reads kilobytes per token, not
   265 MiB. `--no-host` does not move it - GTT and ms/token are unchanged to three digits
   (633.14 vs 633.20).
-- **The clocks barely matter once Mesa is current.** Under load `pp_dpm_mclk` sits at 300 MHz of
-  an available 1750 while `sclk` is pinned at its top and `gpu_busy_percent` reads 100 %; forcing
-  the performance level raises mclk to 1750 and buys 1.18x on Mesa 25.0.7 but only 1.04x on
-  26.1.2.
-- **The context window costs nothing.** 48k and 16k give 633.06 and 632.96 ms/token.
+- **The clocks barely matter once Mesa is current.** With the shipped kernel `pp_dpm_mclk` sits
+  at 300 MHz of an available 1750 under load while `sclk` is pinned at its top and
+  `gpu_busy_percent` reads 100 %; forcing the performance level raises mclk to 1750 and buys
+  1.18x on Mesa 25.0.7 but only 1.04x on 26.1.2. With the T-016 decode it ramps by itself.
+- **The context window costs nothing.** 48k and 16k give 633.06 and 632.96 ms/token before,
+  142.98 and 142.56 after.
 
-**What remains is the kernel, and it is a ceiling nothing here can lift.** The fork's own issue
-[#185](https://github.com/PrismML-Eng/llama.cpp/issues/185) carries the Vulkan PTQ1_0 kernel as
-committed-untested and slow: 0.7 tok/s on a Radeon 860M, and ~9 tok/s on an RX 9070 XT - a current
-flagship with cooperative matrix, fp16 and roughly ten times the bandwidth, on the same RADV. The
-same binary on the same card runs Qwen2.5-3B `Q4_K_M` at 63 tok/s, so it is neither the build nor
-the card. `ptq1_0.glsl` decodes every weight element with a serial base-3 recurrence
-(`v = (v*3) & 0xFF`, up to 4 dependent steps, ~2.5 on average) because PTQ1_0 packs five trits per
-byte; CUDA has a dedicated MMQ instance (`template-instances/mmq-instance-ptq1_0.cu` with its tile
-loaders) and Vulkan has no equivalent. A lookup table - one byte to five trits - instead of the
-recurrence is the obvious fix, and it belongs in the fork against issue #185.
-
-**So: NVIDIA stays a requirement**, and the backend is not a `config.env` setting. If you try it
-anyway, use Mesa >= 25.2 with `RADV_PERFTEST=nogttspill`; 1.58 tok/s is still an order of
-magnitude short of usable for an agent.
+**So: NVIDIA stays a requirement**, and the backend is not a `config.env` setting: 7 tok/s is
+a fifth of the 4060 Ti, and a 4k-token agent prompt costs ~75 s before the first token. It is
+enough for small things on a card that has nothing else, which is what T-016 asked. If you try
+it, use Mesa >= 25.2 with `RADV_PERFTEST=nogttspill` and the fork with the T-016 patch applied
+(`runs/T-016-ptq1_0-vulkan-decode/0001-*.patch`); the pinned `LLAMA_COMMIT` does not carry it
+until upstream takes it against #185.
 
 Two side findings from the same runs, both harmless: `token_embd.weight` (ptq1_0) "cannot be used
 with preferred buffer type Vulkan_Host, using CPU instead", so 265 MiB stays CPU-mapped even at

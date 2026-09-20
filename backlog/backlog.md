@@ -16,4 +16,3 @@ Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
 - [`T-009`](T-009-ram-and-build-memory.md) Measure system RAM needs — build and serve · chore · low · S
 - [`T-013`](T-013-localagent-first-run.md) Run the localagent workflow on Bonsai — one small feature through `bonsai-pi --localagent`, where does a 27B model break the pipeline · spike · medium · M
 - [`T-015`](T-015-context-safety-tokens.md) Decide whether to shrink pi's 4096-token safety margin — patch, upstream or leave · decision · low · S
-- [`T-016`](T-016-ptq1_0-vulkan-decode.md) Rewrite the PTQ1_0 Vulkan decode — byte-to-trits lookup and word loads instead of per-element loops, verified with test-backend-ops, measured on the RX 570 · spike · low · M
