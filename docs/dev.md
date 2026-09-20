@@ -221,7 +221,10 @@ checks `/v1/models` for `MODEL_ALIAS`, so pi never talks to some other server on
 - **Own session (`setsid`).** The server runs outside the terminal's process group: Ctrl+C
   in pi - which cancels a generation - must not reach llama-server, which installs its own
   SIGINT handler and would quit.
-- **Traps.** Closing the terminal (HUP) or TERM runs the cleanup. While pi runs, the wrapper
+- **Orphans.** A session killed with SIGKILL, or a terminal window closed hard, runs no trap:
+  its server stays up with its pid still in `run/server.pid`. The next `bonsai-pi` prunes the
+  dead session entries and adopts that server, so it stops when that session leaves. Verified.
+- **Traps.** Closing the terminal (HUP), TERM or QUIT runs the cleanup. While pi runs, the wrapper
   catches SIGINT with a no-op: uncaught, bash would die with pi when pi exits on SIGINT and skip
   the cleanup. While waiting for the model, Ctrl+C aborts and stops the server.
 

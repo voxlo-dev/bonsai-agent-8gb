@@ -22,10 +22,14 @@ run="$BONSAI_HOME/run"
 mkdir -p "$run/sessions"
 exec 9>"$run/lock"
 
+# Sessions whose process is gone: killed with SIGKILL, or the terminal closed hard, so their
+# trap never ran. Pruned on both ends, which is what lets an orphaned server be adopted.
+prune() { for f in "$run/sessions"/*; do [[ -e "$f" ]] && ! alive "${f##*/}" && rm -f "$f"; done; return 0; }
+
 cleanup() {
   flock 9
   rm -f "$run/sessions/$$"
-  for f in "$run/sessions"/*; do [[ -e "$f" ]] && ! alive "${f##*/}" && rm -f "$f"; done
+  prune
   local pid; pid="$(cat "$run/server.pid" 2>/dev/null || true)"
   if [[ -z "$(ls -A "$run/sessions")" ]] && alive "$pid"; then
     say "stopping bonsai-server"
@@ -39,6 +43,7 @@ cleanup() {
 
 if [[ "$SERVER_AUTOSTART" == "true" ]]; then
   flock 9
+  prune
   touch "$run/sessions/$$"
   trap cleanup EXIT
   trap 'exit 129' HUP
