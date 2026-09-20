@@ -332,7 +332,24 @@ the model: [T-013](../backlog/T-013-localagent-first-run.md).
 
 ## Sampling
 
-`--temp 1.0 --top-p 0.95 --top-k 20` follows the model card. Speculative decoding (`--spec-default`) is off: it accepted 3–10 % of drafted tokens on this model.
+`--temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0` is the model card's **thinking-mode** preset,
+which is the mode this setup runs (`--reasoning on`, and the whole budget arithmetic depends on
+it). The card's second preset - `temperature=0.7, top_p=0.80, presence_penalty=1.5` - belongs to
+instruct/non-thinking mode. It is a mode, not a temperature dial: taking the 0.7 alone into
+thinking mode mixes two presets and is not what the card recommends.
+
+`--min-p 0.0` has to be passed explicitly. llama.cpp defaults it to 0.05, so leaving it out
+silently deviates from the preset; the flag's own help reads `0.0 = disabled`. This was the only
+deviation from the model card in the shipped command line.
+
+A temperature change buys no speed: 35.92 tok/s at 1.0 against 35.89 at 0.7, identical within
+noise.
+
+Speculative decoding is off. The fork offers draft-model-free n-gram modes via `--spec-type`,
+and they were measured in three ways - no configuration beat the baseline on a real agent
+workload, and loosening their triggers made it worse. Acceptance runs at 6-20 % where
+break-even is above 50 %. The full result, including why a synthetic benchmark showed a
+misleading 1.59x, is in [Performance](performance.md#speculative-decoding-tried-rejected).
 
 ## Troubleshooting
 

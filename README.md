@@ -106,6 +106,10 @@ RTX 4060 Ti 8 GB, 48k context, K `q8_0` / V `q4_0` (the numbers predate the 64k 
 
 VRAM stays at ~7.3 GB at 48k and 7.75 GB at 64k: the KV cache is allocated in full at start.
 
+Generation is bandwidth-bound and already uses ~80 % of what the card can sustain, so there is
+little left to tune. [Performance](docs/performance.md) has the roofline and the optimizations
+that were tried and rejected.
+
 ## More
 
 [docs/dev.md](docs/dev.md) explains every non-default choice, with the measurements behind it, plus troubleshooting. Contributors and AI agents start at [AGENTS.md](AGENTS.md).

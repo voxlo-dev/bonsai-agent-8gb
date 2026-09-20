@@ -66,6 +66,7 @@ Docs are split by **lifespan**, and every fact has exactly one home:
 | `README.md` | — | user-facing entry point: install, use, configure |
 | `AGENTS.md` | — | this file: structure, code style, conventions |
 | `docs/dev.md` | durable | why each non-default choice is what it is, with the measurement behind it; plus troubleshooting. Doubles as this project's decisions log |
+| `docs/performance.md` | durable | what limits generation speed: the bandwidth roofline the numbers sit against, and the optimizations tried and rejected |
 | `backlog/` | living | one file per ticket (`T-NNN-{slug}.md`), indexed in `backlog.md`, which carries the `Next ticket` counter |
 | `artefacts/{sprint}/` | ephemeral | workflow run artifacts, bound to their sprint, frozen at `close-sprint`. Absent until the first sprint opens |
 | `.temp/` | ephemeral | gitignored scratch root, safe to delete at any time |

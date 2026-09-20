@@ -22,5 +22,5 @@ exec "$LLAMA_SERVER" -m "$MODEL_PATH" \
   --jinja --reasoning on --reasoning-effort "$EFFORT" \
   --reasoning-budget "$BUDGET" --reasoning-budget-message "$BUDGET_MSG" \
   $PRESERVE_THINKING_FLAG \
-  --temp 1.0 --top-p 0.95 --top-k 20 \
+  --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0 \
   "$@"
