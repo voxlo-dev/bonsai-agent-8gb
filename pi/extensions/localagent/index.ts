@@ -3,7 +3,7 @@
 // orchestrator prompt appended to the system prompt (with a line saying whether a human is
 // reachable, so the plan gate is not the model's guess), and the `dispatch` tool starts one
 // localagent-* agent as a separate `pi -p` process, one at a time. Without the flag it does nothing.
-// Rationale: docs/dev.md#localagent-workflow.
+// Rationale: docs/localagent.md.
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";

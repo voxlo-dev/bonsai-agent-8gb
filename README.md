@@ -49,7 +49,7 @@ bonsai-server        # terminal 1, ready at "listening on http://127.0.0.1:8080"
 bonsai-pi            # terminal 2
 ```
 
-For a larger feature, `bonsai-pi --localagent` runs the [localagent workflow](pi/localagent-workflow/SKILL.md): pi plans with you, then after you approve the plan hands every step to a separate agent with its own small context: spec, tests, implementation (which cannot read the tests), e2e, docs. Type the task after it starts, or pass it as `bonsai-pi --localagent -- "task"`. The `--` matters: without it pi reads the task as the flag's value.
+For a larger feature, `bonsai-pi --localagent` runs the [localagent workflow](docs/localagent.md): pi plans with you, then after you approve the plan hands every step to a separate agent with its own small context — per unit a spec, the implementation, and a review that writes the tests from the spec's acceptance criteria — then e2e and docs. Type the task after it starts, or pass it as `bonsai-pi --localagent -- "task"`. The `--` matters: without it pi reads the task as the flag's value.
 
 `bonsai-pi` is a separate pi instance, so a pi you use with other models keeps its own settings. The server is also a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1`, model `bonsai-27b`.
 

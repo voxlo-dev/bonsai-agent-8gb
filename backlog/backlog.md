@@ -2,7 +2,7 @@
 
 Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
 
-**Next ticket: `T-017`**
+**Next ticket: `T-018`**
 
 ## Draft
 
@@ -16,5 +16,5 @@ Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
 - [`T-009`](T-009-ram-and-build-memory.md) Measure system RAM needs — build and serve · chore · low · S
 - [`T-010`](T-010-other-gpu-backends.md) Try the fork's non-CUDA backends — Vulkan/ROCm at usable speed? · spike · low · M
 - [`T-013`](T-013-localagent-first-run.md) Run the localagent workflow on Bonsai — one small feature through `bonsai-pi --localagent`, where does a 27B model break the pipeline · spike · medium · M
-- [`T-016`](T-016-workflow-without-tdd.md) Rebuild the localagent workflow without TDD — drop wall, stubs and test-author; a reviewer writes the tests after the implementation · fix · high · M
+- [`T-017`](T-017-workflow-cost.md) Cut what the localagent workflow still costs per unit — implementer self-verification, orchestrator bookkeeping, and a reviewer whose findings path has never run · spike · medium · M
 - [`T-015`](T-015-context-safety-tokens.md) Decide whether to shrink pi's 4096-token safety margin — patch, upstream or leave · decision · low · S
