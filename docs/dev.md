@@ -116,8 +116,11 @@ The settings below keep the post-compaction state comfortably under the trigger 
 worst case inside the window. `install.sh pi` writes the two compaction keys into
 `$BONSAI_HOME/pi-agent/settings.json`.
 
-The values below are for the 64k window; the measurements above were taken at 48k, where
-they were 12000 / 12000 / 8000 and `BUDGET` had to drop to 4096 to fit the clamp.
+Because these five constrain each other, they live in `profiles/*.env` and move together.
+`PROFILE=dedicated` (default) is the 64k window below. `PROFILE=display` is the 48k set the
+measurements above were taken with - `CTX` 48000, `BUDGET` 4096, `MAX_TOKENS` 12000,
+`RESERVE_TOKENS` 12000, `KEEP_RECENT_TOKENS` 8000 - for a GPU that also renders a desktop
+and so cannot hold a 64k cache.
 
 | | Value | Constraint |
 | --- | --- | --- |

@@ -55,7 +55,19 @@ For a larger feature, `bonsai-pi --localagent` runs the [localagent workflow](pi
 
 ## Configure
 
-All settings live in [`config.env`](config.env). A variable set in the environment wins, and extra arguments go straight to llama-server:
+The context window and the four budget values come from a **profile**:
+
+| `PROFILE` | Window | For |
+| --- | --- | --- |
+| `dedicated` (default) | 64k | the GPU drives no display; uses 7 747 of 8 188 MiB |
+| `display` | 48k | the GPU also renders a desktop, which takes 0.5-1.2 GB |
+
+```bash
+PROFILE=display ./install.sh pi     # pi's copy of the values
+PROFILE=display bonsai-pi           # and every run after
+```
+
+Both are in [`profiles/`](profiles/); the values inside constrain each other, see [Context budget](docs/dev.md#context-budget). Everything else lives in [`config.env`](config.env). A variable set in the environment wins over both, and extra arguments go straight to llama-server:
 
 ```bash
 CTX=32000 bonsai-server
@@ -65,20 +77,20 @@ bonsai-server --port 9000
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `CTX` | `64000` | context window in tokens; 8 GB fits no more, see [VRAM budget](docs/dev.md#vram-budget) |
+| `CTX` | `64000` | context window in tokens (profile); 8 GB fits no more, see [VRAM budget](docs/dev.md#vram-budget) |
 | `KV_K` / `KV_V` | `q8_0` / `q4_0` | KV cache types for keys and values |
 | `EFFORT` | `medium` | chat-template reasoning effort: `low`, `medium`, `xhigh` |
-| `BUDGET` | `8192` | thinking tokens per turn; at most `RESERVE_TOKENS - 4096 -` a tool call, see [Context budget](docs/dev.md#context-budget) |
+| `BUDGET` | `8192` (profile) | thinking tokens per turn; at most `RESERVE_TOKENS - 4096 -` a tool call, see [Context budget](docs/dev.md#context-budget) |
 | `PRESERVE_THINKING` | `false` | keep earlier turns' thinking in the prompt |
-| `MAX_TOKENS` | `16000` | pi's output cap per turn |
-| `RESERVE_TOKENS` | `16000` | window pi holds back for the answer; it compacts above `CTX - RESERVE_TOKENS` |
-| `KEEP_RECENT_TOKENS` | `12000` | recent history a compaction keeps |
+| `MAX_TOKENS` | `16000` (profile) | pi's output cap per turn |
+| `RESERVE_TOKENS` | `16000` (profile) | window pi holds back for the answer; it compacts above `CTX - RESERVE_TOKENS` |
+| `KEEP_RECENT_TOKENS` | `12000` (profile) | recent history a compaction keeps |
 | `PORT` | `8080` | server port |
 | `PI_VERSION` | `0.85.1` | pi version the context budget was measured with |
 | `SERVER_AUTOSTART` | `true` | let `bonsai-pi` start and stop the server |
 | `SERVER_START_TIMEOUT` | `300` | seconds `bonsai-pi` waits for the model to load |
 
-After changing `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, run `./install.sh pi` again so pi's config matches the server.
+After changing the profile, `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, run `./install.sh pi` again so pi's config matches the server.
 
 The last three carry each other: pi's own defaults assume a 200k window and make it compact on every single turn at this size. [Context budget](docs/dev.md#context-budget) has the measurements and the constraints between them.
 

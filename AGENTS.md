@@ -8,7 +8,8 @@ This repo is **not an application**. It is a reproducible setup: bash scripts th
 
 | Path | Role |
 | --- | --- |
-| `config.env` | **Single source of truth.** Every setting, with `: "${VAR:=default}"` so an environment variable always wins |
+| `config.env` | **Single source of truth.** Every setting, with `: "${VAR:=default}"` so an environment variable always wins. Sources the profile first |
+| `profiles/{dedicated,display}.env` | `CTX` and the four budget values, per GPU situation (`PROFILE`, default `dedicated`). They constrain each other, so they move together |
 | `install.sh` | Step runner: `deps build model pi link`, all of them by default |
 | `scripts/lib.sh` | Sourced first by every step; sources `config.env` and defines `log`/`warn`/`die`/`has` |
 | `scripts/{deps,build,model,pi}.sh` | One install step each, individually re-runnable and idempotent |
@@ -20,7 +21,7 @@ This repo is **not an application**. It is a reproducible setup: bash scripts th
 
 **Two consumers, one config.** `config.env` feeds both the llama-server command line and, through `scripts/pi.sh`, a JSON config written into `PI_AGENT_DIR` (`$BONSAI_HOME/pi-agent`), a private pi instance that never touches `~/.pi`. They drift silently: the server takes its values at start, pi keeps a written copy. After changing `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, `./install.sh pi` must run again.
 
-**The context budget is arithmetic, not taste.** `CTX`, `MAX_TOKENS`, `RESERVE_TOKENS` and `KEEP_RECENT_TOKENS` constrain each other; getting them wrong makes pi compact on every single turn or lets it request more tokens than the window holds. The constraints and the measurements behind them are in [`docs/dev.md`](docs/dev.md#context-budget). Do not change one of them alone.
+**The context budget is arithmetic, not taste.** `CTX`, `BUDGET`, `MAX_TOKENS`, `RESERVE_TOKENS` and `KEEP_RECENT_TOKENS` constrain each other, which is why they live in a profile and move together; getting them wrong makes pi compact on every single turn or lets it request more tokens than the window holds. The constraints and the measurements behind them are in [`docs/dev.md`](docs/dev.md#context-budget). Do not change one of them alone.
 
 ## Build / test / run
 
@@ -50,7 +51,7 @@ There is no test suite, and adding one was considered and declined (bash, no fra
 
 - POSIX-ish bash, `set -euo pipefail` via `lib.sh`; `bin/bonsai-server` sets it itself
 - A comment block at the top of every script saying what it does and what it needs
-- Settings are declared in `config.env` only, never hard-coded in a consumer
+- Settings are declared in `config.env` only (the window and budget values in `profiles/*.env`), never hard-coded in a consumer
 
 ## Doc map
 

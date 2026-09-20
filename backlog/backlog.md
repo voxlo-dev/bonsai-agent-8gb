@@ -2,7 +2,7 @@
 
 Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
 
-**Next ticket: `T-015`**
+**Next ticket: `T-016`**
 
 ## Draft
 
@@ -17,3 +17,4 @@ Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
 - [`T-010`](T-010-other-gpu-backends.md) Try the fork's non-CUDA backends — Vulkan/ROCm at usable speed? · spike · low · M
 - [`T-013`](T-013-localagent-first-run.md) Run the localagent workflow on Bonsai — one small feature through `bonsai-pi --localagent`, where does a 27B model break the pipeline · spike · medium · M
 - [`T-014`](T-014-verify-64k-budget-under-load.md) Verify the 64k budget under load — Tron at CTX 64000 / BUDGET 8192, compaction rate and quality · chore · high · S
+- [`T-015`](T-015-context-safety-tokens.md) Decide whether to shrink pi's 4096-token safety margin — patch, upstream or leave · decision · low · S
