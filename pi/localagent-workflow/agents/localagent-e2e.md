@@ -28,11 +28,13 @@ You exist for the failure class no unit test can see: every unit green, and the 
    - **No UI, but an integration surface** (API, persistence, external service) → drive the deployed/started process over its real boundary: an HTTP request to a running server, not a called function. Its own runner is fine here; starting the real process is not optional.
    - **Neither** → return `NO_SURFACE`; do not invent a UI. Not available when a UI exists.
 3. **One flow, start to finish, broad.** The single journey that touches the plan's main features in sequence — open the app, do the thing it exists for, see the result. Its first assertion is that the surface comes up at all: page rendered, no uncaught runtime or console error, no failed request.
-4. **No edge cases.** Not an error-path matrix, not a second flow per feature, not a variant with different data — the units own all of that and already cover it. Breadth over depth, and nothing more.
+4. **No edge cases — this is a refusal, not a preference.** Not an error-path matrix, not a second flow per feature, not a variant with different data: the units own all of that and already cover it. One flow, its steps asserted once each. A driver with dozens of checks in it is a failed run even when it goes green — delete the extra checks before you return.
 5. Write a short report to `localagent/E2E.md`: the flow's steps with PASS/FAIL, and for any FAIL the observed vs expected behaviour plus the error text.
 
 ## Rules
 
+- **Budget: 12 turns.** Past that, write the report with what you have and return. This is the cheap
+  step in the run; the units already carry the coverage.
 - Test only behaviour the PLAN promises. Do not invent scope.
 - The app must run the way it really runs — its own start or build command, its real config. A flow that only passes against a stubbed backend, a mocked route or a hand-built fixture page proves nothing about the build.
 - Deterministic and repeatable: **the one committed driver script**, no ad-hoc manual pokes.

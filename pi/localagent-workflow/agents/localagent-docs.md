@@ -22,6 +22,8 @@ One job: bring the project's own documentation in line with what this run built 
 
 ## Rules
 
+- **Budget: 8 turns, and the smallest edit that makes the docs true.** A four-command CLI gets a
+  handful of lines, not a page. Past the budget, finish the edit you are in and return.
 - Only touch documentation. Never change source or tests.
 - Do not restate the whole feature; update the specific places that are now wrong or missing.
 - Nothing drifted → say so, change nothing.

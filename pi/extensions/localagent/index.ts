@@ -1,8 +1,8 @@
 // Runs the localagent workflow (./workflow, copied from pi/localagent-workflow) on pi.
 // `pi --localagent` makes the session its orchestrator: the workflow skill is offered, the
-// orchestrator prompt appended to the system prompt, and the `dispatch` tool starts one
+// orchestrator prompt appended to the system prompt (with a line saying whether a human is
+// reachable, so the plan gate is not the model's guess), and the `dispatch` tool starts one
 // localagent-* agent as a separate `pi -p` process, one at a time. Without the flag it does nothing.
-// Agents whose definition denies reading files (OpenCode `permission.read`) run behind ./wall.ts.
 // Rationale: docs/dev.md#localagent-workflow.
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
@@ -11,7 +11,6 @@ import { fileURLToPath } from "node:url";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { type ExtensionAPI, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { denies } from "./wall.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const workflow = path.join(here, "workflow");
@@ -21,7 +20,6 @@ interface Agent {
 	name: string;
 	primary: boolean;
 	prompt: string;
-	wall: string[];
 }
 
 function loadAgents(): Agent[] {
@@ -32,12 +30,10 @@ function loadAgents(): Agent[] {
 		.sort()
 		.map((f) => {
 			const { frontmatter: fm, body } = parseFrontmatter<Record<string, any>>(fs.readFileSync(path.join(dir, f), "utf8"));
-			const read: Record<string, string> = fm.permission?.read ?? {};
 			return {
 				name: fm.name ?? f.slice(0, -3),
 				primary: fm.mode === "primary",
 				prompt: body,
-				wall: Object.keys(read).filter((glob) => read[glob] === "deny"),
 			};
 		});
 }
@@ -107,9 +103,14 @@ export default function (pi: ExtensionAPI) {
 		if (pi.getFlag("localagent")) return { skillPaths: [workflow] };
 	});
 
-	pi.on("before_agent_start", async (event) => {
+	// The plan gate needs to know whether anyone can answer it; pi knows, the model does not.
+	pi.on("before_agent_start", async (event, ctx) => {
 		const orchestrator = agents.find((a) => a.primary);
-		if (orchestrator) return { systemPrompt: `${event.systemPrompt}\n\n${orchestrator.prompt}` };
+		if (!orchestrator) return;
+		const gate = ctx.hasUI
+			? "A human is at this session: the plan gate is binding. Show the plan and stop until it is approved."
+			: "No human is reachable (headless): record the plan gate as auto-approved in STATE.md and continue.";
+		return { systemPrompt: `${event.systemPrompt}\n\n${orchestrator.prompt}\n\n## Session\n\n${gate}` };
 	});
 
 	async function dispatch(name: string, brief: string, signal: AbortSignal | undefined, onUpdate: any, ctx: any) {
@@ -119,16 +120,6 @@ export default function (pi: ExtensionAPI) {
 		// Nothing the orchestrator session loaded reaches the child: no extensions (so no nested
 		// dispatch), no skills, no AGENTS.md. The brief is its whole context.
 		const args = ["--mode", "json", "-p", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files"];
-		const env = { ...process.env };
-		if (agent.wall.length) {
-			args.push("-e", path.join(here, "wall.ts"));
-			// Wall drop: test paths the brief names explicitly stay readable.
-			const named = brief
-				.split(/[\s`'"(),;<>]+/)
-				.map((t) => t.replace(/[.:!?]+$/, ""))
-				.filter((t) => t && denies(agent.wall, ctx.cwd, t));
-			env.LOCALAGENT_WALL = JSON.stringify({ deny: agent.wall, allow: named.map((t) => path.resolve(ctx.cwd, t)) });
-		}
 		const sessionFile = ctx.sessionManager.getSessionFile();
 		if (sessionFile) args.push("--session-dir", path.join(path.dirname(sessionFile), "dispatch", ctx.sessionManager.getSessionId()));
 		else args.push("--no-session");
@@ -142,7 +133,7 @@ export default function (pi: ExtensionAPI) {
 
 		const code = await new Promise<number>((resolve) => {
 			const [cmd, argv] = piInvocation(args);
-			const proc = spawn(cmd, argv, { cwd: ctx.cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+			const proc = spawn(cmd, argv, { cwd: ctx.cwd, stdio: ["ignore", "pipe", "pipe"] });
 			let buffer = "";
 			const onLine = (line: string) => {
 				let event: any;
