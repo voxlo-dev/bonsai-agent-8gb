@@ -1,17 +1,19 @@
 # Spec: U{N} — {Title}
 
-> Behaviour + acceptance. The interface surface is the **stub files** named below — reference their
-> names here, never restate a signature: the code is the contract, this is what it must do.
+> The unit's whole contract: interface, behaviour, acceptance. The implementer builds from this file
+> and the reviewer writes one test per criterion from it. **~80 lines at most** — it is read twice.
 
-## Contract
+## Interface
 
-The stub files this unit's surface lives in. Both halves build against these; neither may edit them.
+What this unit exposes, in prose — one line per symbol: where it lives, what it takes, what it
+returns, what it raises.
 
-- {real/path}: {the symbols declared there, one line}
+- `{path}`: `{name}({args})` → {what comes back}; raises {when}
 
-Routes / CLI / other non-importable surface, reached through the entry point named above — or "none":
+How it is reached from outside — the command, the route, the entry point — or "none but the symbols
+above":
 
-- `{METHOD} {route}` → `{request shape}` ⇒ `{response shape}`
+- `{METHOD} {route}` → {request} ⇒ {response}  ·  `{cli command}` → {what it prints / its exit code}
 
 ## Scope
 
@@ -28,7 +30,7 @@ Routes / CLI / other non-importable surface, reached through the entry point nam
 
 ## Acceptance
 
-1. {observable condition that must hold — the test-author pins each of these}
+1. {observable condition that must hold — the reviewer writes one test per line here}
 2. ...
 
 ## Consumes from prior units

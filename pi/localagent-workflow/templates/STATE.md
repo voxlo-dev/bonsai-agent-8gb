@@ -7,9 +7,9 @@ E2E: {command} → {the one driver script every e2e run grows}   # or: none
 
 ## Units
 
-Status ladder: pending → specced → tests-red → done
-Attempts = escalation rounds on this unit (wall drops at 2, escalate the run at 3). The implementer's
-own fix cycles are not counted here — it self-verifies and only reports back once.
+Status ladder: pending → specced → implemented → done
+Attempts = reviewer rounds on this unit (escalate the unit at 2). An agent's own fix cycles are not
+counted here — each self-verifies and only reports back once.
 
 | ID | Title | Depends | Status | Attempts | Dir |
 | --- | --- | --- | --- | --- | --- |

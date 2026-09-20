@@ -59,7 +59,7 @@ bonsai-server        # terminal 1, ready at "listening on http://127.0.0.1:8080"
 bonsai-pi            # terminal 2
 ```
 
-For a larger feature, `bonsai-pi --localagent` runs the [localagent workflow](pi/localagent-workflow/SKILL.md): pi plans with you, then after you approve the plan hands every step to a separate agent with its own small context: spec, tests, implementation (which cannot read the tests), e2e, docs. Type the task after it starts, or pass it as `bonsai-pi --localagent -p "task"`. The flag must not come directly before the task: pi would read the task as the flag's value.
+For a larger feature, `bonsai-pi --localagent` runs the [localagent workflow](pi/localagent-workflow/SKILL.md): pi plans with you, then after you approve the plan hands every step to a separate agent with its own small context: spec, tests, implementation (which cannot read the tests), e2e, docs. Type the task after it starts, or pass it as `bonsai-pi --localagent -- "task"`. The `--` matters: without it pi reads the task as the flag's value.
 
 `bonsai-pi` is a separate pi instance, so a pi you use with other models keeps its own settings. The server is also a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1`, model `bonsai-27b`.
 
@@ -116,6 +116,10 @@ RTX 4060 Ti 8 GB, 48k context, K `q8_0` / V `q4_0` (the numbers predate the 64k 
 | ~39k | 399 tok/s | 27 tok/s |
 
 VRAM stays at ~7.3 GB at 48k and 7.75 GB at 64k: the KV cache is allocated in full at start.
+
+Generation is bandwidth-bound and already uses ~80 % of what the card can sustain, so there is
+little left to tune. [Performance](docs/performance.md) has the roofline and the optimizations
+that were tried and rejected.
 
 AMD RX 570 8 GB through Vulkan (RADV, Mesa 26.1.2), same KV types, with the PTQ1_0 decode from
 [`patches/vulkan`](patches/vulkan/):

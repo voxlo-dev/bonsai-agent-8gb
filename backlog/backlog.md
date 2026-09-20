@@ -2,7 +2,7 @@
 
 Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
 
-**Next ticket: `T-018`**
+**Next ticket: `T-019`**
 
 ## Draft
 
@@ -17,3 +17,4 @@ Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
 - [`T-013`](T-013-localagent-first-run.md) Run the localagent workflow on Bonsai — one small feature through `bonsai-pi --localagent`, where does a 27B model break the pipeline · spike · medium · M
 - [`T-015`](T-015-context-safety-tokens.md) Decide whether to shrink pi's 4096-token safety margin — patch, upstream or leave · decision · low · S
 - [`T-017`](T-017-upstream-ptq1_0-vulkan-patch.md) Upstream the PTQ1_0 Vulkan decode to the fork — PR against #185 with the T-016 patch, then drop `patches/vulkan/` once the pin carries it · chore · medium · S
+- [`T-018`](T-018-workflow-without-tdd.md) Rebuild the localagent workflow without TDD — drop wall, stubs and test-author; a reviewer writes the tests after the implementation · fix · high · M

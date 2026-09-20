@@ -398,15 +398,13 @@ dies during start. With the real model:
 
 ## localagent workflow
 
-`pi/localagent-workflow/` is a multi-agent build (plan gate, per-unit TDD loop behind a
-test/implementation wall, e2e and docs) written for OpenCode. Its skill and the orchestrator prompt
-describe pi now: no agent registration, `dispatch({ agent, brief })` as the only way to start an
-agent, template paths passed absolute, the wall drop as naming test paths in the brief. The protocol
-itself - phases, gates, who fixes what - is unchanged; `codegraph`, which this setup does not have,
-is gone from the agent prompts. The agent frontmatter keeps the OpenCode dialect. `bonsai-pi --localagent`
-runs it on pi through the extension in `pi/extensions/localagent/`, which `install.sh pi` copies
-with the workflow into `$PI_AGENT_DIR/extensions/localagent/`. Without the flag the extension
-registers nothing.
+`pi/localagent-workflow/` is a multi-agent build (plan gate, per-unit spec/implement/review loop,
+e2e and docs) adapted from a workflow written for OpenCode. Its skill and the orchestrator prompt
+describe pi: no agent registration, `dispatch({ agent, brief })` as the only way to start an agent,
+template paths passed absolute. `codegraph`, which this setup does not have, is gone from the agent
+prompts; the agent frontmatter keeps the OpenCode dialect. `bonsai-pi --localagent` runs it on pi
+through the extension in `pi/extensions/localagent/`, which `install.sh pi` copies with the workflow
+into `$PI_AGENT_DIR/extensions/localagent/`. Without the flag the extension registers nothing.
 
 **Own extension, not pi-subagents.** [pi-subagents](https://pi.dev/packages/pi-subagents) 0.69.0
 was tried first, installed into a scratch agent dir against a stand-in endpoint:
@@ -415,10 +413,10 @@ was tried first, installed into a scratch agent dir against a stand-in endpoint:
   `subagent` tool alone is 18.9k chars, of which 13.8k is a parameter schema that none of its
   `toolDescriptionMode`s shortens; a minimal custom description still left 29.1k. The
   orchestrator needs `{agent, brief}`.
-- It checks `permission:` per tool only (`read: deny`), no path globs, so it rejects the
-  implementer's OpenCode block as an invalid agent definition.
+- It checks `permission:` per tool only (`read: deny`), no path globs, so it rejected the
+  implementer's OpenCode block (then still a wall, see below) as an invalid agent definition.
 - Its builtin `worker` answers to the alias `implementer`: a small model that drops the
-  `localagent-` prefix would reach an agent without the wall.
+  `localagent-` prefix would silently reach an agent that is not this workflow's.
 
 With this extension the parent prompt is 12.3k chars against 6.8k without the flag: 764 for
 the `dispatch` tool, the rest the orchestrator prompt and the skill entry - the workflow itself.
@@ -440,29 +438,70 @@ the `dispatch` tool, the rest the orchestrator prompt and the skill entry - the 
 - Its session goes to `sessions/{cwd-slug}/dispatch/{orchestrator-session-id}/`, beside the
   orchestrator's own log.
 
-**The wall** is `wall.ts`, loaded only into agents whose definition carries an OpenCode
-`permission.read` block with `deny` entries - the implementer. Those globs are the wall, read
-from the agent file, so the list has one home. It blocks `read` (and `grep`/`find`/`ls`, when
-active) on matching paths relative to the project; a directory counts when its contents would.
-`bash` stays open, as in OpenCode: running the tests is the point, and the workflow says so
-("one restriction is enforced; everything else is prompt"). The wall drop needs no switch: a
-test path the brief names explicitly stays readable (relative or absolute, sentence punctuation
-stripped), and the workflow puts test paths in the brief exactly when it drops the wall.
+**The TDD wall is gone, and that is the measurement this section keeps.** Until
+[T-018](../backlog/T-018-workflow-without-tdd.md) the loop was `spec-architect` → `test-author` →
+`implementer`, the last one blocked from reading test source by a `wall.ts` extension loaded from
+the agent's OpenCode `permission.read` globs. The [T-013](../backlog/T-013-localagent-first-run.md)
+run finished its feature correctly - 12/12 tests green - but took 2 h 14 and 198 turns for 196 lines
+of product code, against 1 h 31 and 108 turns for the same model building a comparable thing in one
+context. 133 of those 134 minutes were model time, so **the turn count is the bill**; context
+reloading after a dispatch was not the cost (14 of 198 turns reprocessed their prompt).
+
+46 of those minutes - 34 % of the run - went to one broken assertion. The test-author wrote
+`assertEqual([(1, "a", False)], json.load(f))`, which parsed JSON can never satisfy; the implementer,
+not allowed to look, spent 23 turns reconstructing the expectation from failure output, the
+spec-architect then ruled `ESCALATE unfounded`, and the test-author fixed it in two minutes. That is
+the wall's built-in economics: it costs exactly when the test is wrong, and a 27B model writes wrong
+tests often. Note which half blindness protected - the blind *test* was broken, the blind *code* was
+correct. The spec was the reliable artifact, not the blindness.
+
+What replaced it: `spec.md` in prose (no stub files - they existed only to let two blind halves
+agree on a signature, 7-10 minutes per unit), the implementer **running what it built** before
+returning, and a `reviewer` that writes one test per acceptance criterion *from the spec, before
+opening the code*, then reviews against the same criteria and never edits production code. Prompt
+order is the only lever that keeps after-the-fact tests from pinning what exists instead of what was
+asked for. Two further T-013 faults fixed along the way: the finalize steps carry turn budgets (e2e
+produced a 317-line driver with 88 checks against a one-flow rule; docs spent 9 minutes on a 122-line
+README for a four-command CLI), and the plan gate no longer depends on the model's guess - `ctx.hasUI`
+goes into the orchestrator's system prompt as a `## Session` line, because in T-013 the model
+recorded "plan auto-approved - headless test run, no human reachable" with a human sitting in front
+of it.
+
+Nothing in the workflow is enforced any more; all of it is prompt plus the orchestrator's own
+`git diff` check. `wall.ts`, the `permission.read` blocks and the brief-path allowlist are deleted.
 
 **Flag order.** pi hands an unknown flag the next argument as its value when that argument does
 not start with `-`. Extension flags count as unknown there, so `bonsai-pi --localagent "task"`
-swallows the task. Use `bonsai-pi --localagent` and type the task, or `--localagent -p "task"`.
+swallows the task. `--` ends option parsing and makes the rest the prompt:
+`bonsai-pi --localagent -- "task"`, with or without `-p`.
 
 Verified against a scripted stand-in endpoint that plays orchestrator and implementer: without
 the flag no `dispatch` and no skill; with it the orchestrator prompt and the skill are in the
-system prompt, the child has no `dispatch` and no `AGENTS.md`, its `read` of a test file is
-blocked with the wall's message, the same read passes when the brief names the file, and the
-orchestrator gets `DONE src/foo.ts` from a reply that wraps it in prose. Not yet run against
-the model: [T-013](../backlog/T-013-localagent-first-run.md).
+system prompt, the child has no `dispatch` and no `AGENTS.md`, and the orchestrator gets
+`DONE src/foo.ts` from a reply that wraps it in prose. The rebuilt pipeline has not been run against
+the model yet - that is [T-018](../backlog/T-018-workflow-without-tdd.md)'s Verify step, a re-run of
+the T-013 task on the same profile so the turn counts stay comparable.
 
 ## Sampling
 
-`--temp 1.0 --top-p 0.95 --top-k 20` follows the model card. Speculative decoding (`--spec-default`) is off: it accepted 3–10 % of drafted tokens on this model.
+`--temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0` is the model card's **thinking-mode** preset,
+which is the mode this setup runs (`--reasoning on`, and the whole budget arithmetic depends on
+it). The card's second preset - `temperature=0.7, top_p=0.80, presence_penalty=1.5` - belongs to
+instruct/non-thinking mode. It is a mode, not a temperature dial: taking the 0.7 alone into
+thinking mode mixes two presets and is not what the card recommends.
+
+`--min-p 0.0` has to be passed explicitly. llama.cpp defaults it to 0.05, so leaving it out
+silently deviates from the preset; the flag's own help reads `0.0 = disabled`. This was the only
+deviation from the model card in the shipped command line.
+
+A temperature change buys no speed: 35.92 tok/s at 1.0 against 35.89 at 0.7, identical within
+noise.
+
+Speculative decoding is off. The fork offers draft-model-free n-gram modes via `--spec-type`,
+and they were measured in three ways - no configuration beat the baseline on a real agent
+workload, and loosening their triggers made it worse. Acceptance runs at 6-20 % where
+break-even is above 50 %. The full result, including why a synthetic benchmark showed a
+misleading 1.59x, is in [Performance](performance.md#speculative-decoding-tried-rejected).
 
 ## Troubleshooting
 

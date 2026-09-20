@@ -17,8 +17,8 @@ This repo is **not an application**. It is a reproducible setup: bash scripts th
 | `bin/bonsai-server` | The launcher. Sources `config.env` **directly**, not through `lib.sh` |
 | `bin/bonsai-pi` | Starts the pinned pi with `PI_CODING_AGENT_DIR` set to `PI_AGENT_DIR`, and starts/stops `bonsai-server` around it when none runs. State in `$BONSAI_HOME/run/`. Same sourcing as `bonsai-server` |
 | `pi/pi-agents.md` | Runtime artifact, copied to `$PI_AGENT_DIR/AGENTS.md`. **Not this file** |
-| `pi/extensions/localagent/` | pi extension behind `bonsai-pi --localagent`: the `dispatch` tool and the test wall. Copied with the workflow into `$PI_AGENT_DIR/extensions/localagent/` |
-| `pi/localagent-workflow/` | The workflow it runs (skill, seven agent prompts, templates). Written for OpenCode, its setup and dispatch parts adapted to pi |
+| `pi/extensions/localagent/` | pi extension behind `bonsai-pi --localagent`: the `dispatch` tool, and the session's `hasUI` for the plan gate. Copied with the workflow into `$PI_AGENT_DIR/extensions/localagent/` |
+| `pi/localagent-workflow/` | The workflow it runs (skill, seven agent prompts, templates). Adapted from an OpenCode workflow; its setup and dispatch parts rewritten for pi |
 
 **Two consumers, one config.** `config.env` feeds both the llama-server command line and, through `scripts/pi.sh`, a JSON config written into `PI_AGENT_DIR` (`$BONSAI_HOME/pi-agent`), a private pi instance that never touches `~/.pi`. They drift silently: the server takes its values at start, pi keeps a written copy. After changing `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, `./install.sh pi` must run again.
 
@@ -68,6 +68,7 @@ Docs are split by **lifespan**, and every fact has exactly one home:
 | `README.md` | — | user-facing entry point: install, use, configure |
 | `AGENTS.md` | — | this file: structure, code style, conventions |
 | `docs/dev.md` | durable | why each non-default choice is what it is, with the measurement behind it; plus troubleshooting. Doubles as this project's decisions log |
+| `docs/performance.md` | durable | what limits generation speed: the bandwidth roofline the numbers sit against, and the optimizations tried and rejected |
 | `backlog/` | living | one file per ticket (`T-NNN-{slug}.md`), indexed in `backlog.md`, which carries the `Next ticket` counter |
 | `artefacts/{sprint}/` | ephemeral | workflow run artifacts, bound to their sprint, frozen at `close-sprint`. Absent until the first sprint opens |
 | `.temp/` | ephemeral | gitignored scratch root, safe to delete at any time |
