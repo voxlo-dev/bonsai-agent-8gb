@@ -177,6 +177,51 @@ with preferred buffer type Vulkan_Host, using CPU instead", so 265 MiB stays CPU
 `-ngl 99`; and only 16 layers carry a KV cache (the rest log as `filtered`), which is why 48k
 costs just 1222 MiB - K `q8_0` 799 MiB, V `q4_0` 423 MiB - and why a 48k window fits 8 GB at all.
 
+## RAM and build memory
+
+Measured on the RX 570 box (8 cores, 24 GB, no swap, Mesa 26.1.2), Vulkan backend, T-009.
+Raw samples and the build log: `runs/T-009-ram-and-build-memory/`.
+
+**Serving is cheap; loading is not.**
+
+| | RSS |
+| --- | --- |
+| llama-server peak while loading the model (`VmHWM`) | 5 841 MB |
+| resident once loaded, idle | 468 MB |
+| resident while generating | 622 MB |
+| page cache holding the GGUF | ~6 300 MB, reclaimable |
+
+The load peak is the 5.9 GB model file read through `mmap`; afterwards the pages are backed by
+the file and the kernel drops them under pressure, so the process settles below 700 MB.
+Generation adds ~150 MB and nothing grows with the context - the KV cache lives in VRAM. A
+machine with **8 GB of RAM serves this model comfortably**, and the page cache is what uses
+whatever is left over.
+
+**Building is the memory-hungry part, not serving.**
+
+| | |
+| --- | --- |
+| Peak across all compilers, `-j8`, ccache off | 5 735 MB |
+| Largest single translation unit | 4 439 MB |
+| Concurrent compilers at that peak | 4 |
+| Wall clock, `-j8` | 218 s |
+
+The 4.4 GB unit is `mul_mm.comp.cpp`, the generated Vulkan matmul shader permutations - its
+object file is 29 MB, six times the next largest. The shader generation step before it spawns
+up to 38 `glslc` processes at once, but they are small (430 MB together).
+
+So the binding constraint is one heavy unit plus whatever else `make` starts next to it, which
+is why `build.sh` no longer passes `-j $(nproc)` unconditionally: it allows ~2 GB per job and
+takes the lower of that and the core count, overridable with `BUILD_JOBS`. On the 8-core box
+with 16 GB free that is `-j7`; on an 8 GB machine it is `-j3`, where `-j8` would have put two
+heavy units side by side with no room for them.
+
+**Not measured:** the CUDA build. `nvcc` has a different memory profile from `g++` on generated
+shader code, and no NVIDIA GPU is reachable from the machines this was run on - the numbers above
+are the Vulkan path only. The box also had llama-server and the Docker inference node running
+throughout, which is why guest-wide usage peaked at 15.1 GB while the build itself accounts for
+5.7 GB of it.
+
 ## VRAM budget
 
 | Item | MiB |

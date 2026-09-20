@@ -75,8 +75,21 @@ cmake -B build -S . \
   "${launchers[@]}" \
   >/dev/null
 
-log "building llama-server (takes a while)"
-nice -n "${NICE:-10}" cmake --build build --target llama-server -j "$(nproc)"
+# One Vulkan shader unit (mul_mm.comp.cpp) peaks at 4.4 GB and the whole -j8 build at 5.7 GB,
+# so on a machine with fewer GB than cores x 2 the default -j nproc is what runs it out of
+# memory. Measured in docs/dev.md#ram-and-build-memory.
+jobs="$BUILD_JOBS"
+if [[ -z "$jobs" ]]; then
+  cores="$(nproc)"
+  avail_mb="$(awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo)"
+  by_mem=$(( avail_mb / 2048 ))
+  (( by_mem < 1 )) && by_mem=1
+  jobs=$(( by_mem < cores ? by_mem : cores ))
+  (( jobs < cores )) && warn "only ${avail_mb} MB free - building with -j$jobs instead of -j$cores"
+fi
+
+log "building llama-server with -j$jobs (takes a while)"
+nice -n "${NICE:-10}" cmake --build build --target llama-server -j "$jobs"
 
 echo "$want" > "$stamp"
 "$LLAMA_SERVER" --version 2>&1 | tail -2
