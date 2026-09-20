@@ -55,7 +55,7 @@ dynamically, so the toolkit stays after the build. pi needs Node.js >= 22.19 (`e
 | KV cache, per 1k tokens, `q8_0`/`q8_0` | 34 |
 | KV cache, per 1k tokens, `q8_0`/`q4_0` | 26 |
 
-At 48k context with `q8_0`/`q4_0` the process holds ~7.3 GB of 8 GB. 64k should fit at ~7.75 GB but is untested. 80k does not fit.
+At 48k context with `q8_0`/`q4_0` the process holds ~7.3 GB of 8 GB. **64k is the default**: measured at 7 747 MiB of 8 188, 36 tok/s at short context and no layer on the CPU - 441 MiB to spare, which is why the GPU must drive no display. 80k does not fit.
 
 **Display on the iGPU.** When the RTX also drives the Windows desktop, the desktop takes 0.5 to 1.2 GB and competes for GPU time. With the monitor on the mainboard (iGPU enabled in BIOS, browsers set to "Power saving" under Windows *Settings → System → Display → Graphics*), generation went from 21 to 34 tok/s in the same browser-based session.
 
@@ -116,11 +116,15 @@ The settings below keep the post-compaction state comfortably under the trigger 
 worst case inside the window. `install.sh pi` writes the two compaction keys into
 `$BONSAI_HOME/pi-agent/settings.json`.
 
+The values below are for the 64k window; the measurements above were taken at 48k, where
+they were 12000 / 12000 / 8000 and `BUDGET` had to drop to 4096 to fit the clamp.
+
 | | Value | Constraint |
 | --- | --- | --- |
-| `RESERVE_TOKENS` | 12000 | >= the largest single turn's output (11 227 measured) |
-| `MAX_TOKENS` | 12000 | `CTX - RESERVE + MAX_TOKENS <= CTX`, so exactly 48000 |
-| `KEEP_RECENT_TOKENS` | 8000 | real cost ~1.4x, so ~16k in use against a 36 000 trigger |
+| `RESERVE_TOKENS` | 16000 | >= the largest single turn's output (11 441 measured), and >= `BUDGET` + a tool call + 4096 for the clamp |
+| `MAX_TOKENS` | 16000 | `CTX - RESERVE + MAX_TOKENS <= CTX`, so exactly 64000 |
+| `KEEP_RECENT_TOKENS` | 12000 | real cost ~1.4-2x, so ~24k in use against a 48 000 trigger |
+| `BUDGET` | 8192 | 8192 + ~3.7k tool call <= `RESERVE_TOKENS` - 4096 = 11 904 |
 
 That leaves ~20k of working room.
 

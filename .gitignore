@@ -25,6 +25,9 @@ Desktop.ini
 # briefs, reports and transcripts. Cleared at close-sprint; safe to delete at any time.
 .temp/
 
+# Test runs: kept on purpose, unlike .temp/ - one folder per run, with its log
+runs/
+
 # Headroom
 .tokensave
 

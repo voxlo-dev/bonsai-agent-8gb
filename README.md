@@ -58,21 +58,21 @@ For a larger feature, `bonsai-pi --localagent` runs the [localagent workflow](pi
 All settings live in [`config.env`](config.env). A variable set in the environment wins, and extra arguments go straight to llama-server:
 
 ```bash
-CTX=64000 bonsai-server
+CTX=32000 bonsai-server
 BUDGET=3072 EFFORT=low bonsai-server
 bonsai-server --port 9000
 ```
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `CTX` | `48000` | context window in tokens |
+| `CTX` | `64000` | context window in tokens; 8 GB fits no more, see [VRAM budget](docs/dev.md#vram-budget) |
 | `KV_K` / `KV_V` | `q8_0` / `q4_0` | KV cache types for keys and values |
 | `EFFORT` | `medium` | chat-template reasoning effort: `low`, `medium`, `xhigh` |
-| `BUDGET` | `4096` | thinking tokens per turn; with `RESERVE_TOKENS` 12000 at most ~5k, see [Context budget](docs/dev.md#context-budget) |
+| `BUDGET` | `8192` | thinking tokens per turn; at most `RESERVE_TOKENS - 4096 -` a tool call, see [Context budget](docs/dev.md#context-budget) |
 | `PRESERVE_THINKING` | `false` | keep earlier turns' thinking in the prompt |
-| `MAX_TOKENS` | `12000` | pi's output cap per turn |
-| `RESERVE_TOKENS` | `12000` | window pi holds back for the answer; it compacts above `CTX - RESERVE_TOKENS` |
-| `KEEP_RECENT_TOKENS` | `8000` | recent history a compaction keeps |
+| `MAX_TOKENS` | `16000` | pi's output cap per turn |
+| `RESERVE_TOKENS` | `16000` | window pi holds back for the answer; it compacts above `CTX - RESERVE_TOKENS` |
+| `KEEP_RECENT_TOKENS` | `12000` | recent history a compaction keeps |
 | `PORT` | `8080` | server port |
 | `PI_VERSION` | `0.85.1` | pi version the context budget was measured with |
 | `SERVER_AUTOSTART` | `true` | let `bonsai-pi` start and stop the server |
@@ -80,11 +80,11 @@ bonsai-server --port 9000
 
 After changing `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, run `./install.sh pi` again so pi's config matches the server.
 
-The last three carry each other: pi's own defaults assume a 200k window and make it compact on every single turn at 48k. [Context budget](docs/dev.md#context-budget) has the measurements and the constraints between them.
+The last three carry each other: pi's own defaults assume a 200k window and make it compact on every single turn at this size. [Context budget](docs/dev.md#context-budget) has the measurements and the constraints between them.
 
 ## Performance
 
-RTX 4060 Ti 8 GB, 48k context, K `q8_0` / V `q4_0`:
+RTX 4060 Ti 8 GB, 48k context, K `q8_0` / V `q4_0` (the numbers predate the 64k default):
 
 | Context filled | Prompt processing | Generation |
 | --- | --- | --- |
@@ -92,7 +92,7 @@ RTX 4060 Ti 8 GB, 48k context, K `q8_0` / V `q4_0`:
 | ~18k | 451 tok/s | 31 tok/s |
 | ~39k | 399 tok/s | 27 tok/s |
 
-VRAM stays at ~7.3 GB: the KV cache is allocated in full at start.
+VRAM stays at ~7.3 GB at 48k and 7.75 GB at 64k: the KV cache is allocated in full at start.
 
 ## More
 

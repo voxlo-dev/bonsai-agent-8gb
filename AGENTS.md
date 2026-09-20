@@ -68,6 +68,7 @@ Docs are split by **lifespan**, and every fact has exactly one home:
 | `backlog/` | living | one file per ticket (`T-NNN-{slug}.md`), indexed in `backlog.md`, which carries the `Next ticket` counter |
 | `artefacts/{sprint}/` | ephemeral | workflow run artifacts, bound to their sprint, frozen at `close-sprint`. Absent until the first sprint opens |
 | `.temp/` | ephemeral | gitignored scratch root, safe to delete at any time |
+| `runs/` | ephemeral | gitignored, but **kept**: one folder per long test run (`{ticket}-{slug}/`) with its `run.sh` and log, so a result stays readable after the chat that produced it |
 
 ## Current sprint
 
