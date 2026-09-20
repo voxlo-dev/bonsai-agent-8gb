@@ -22,6 +22,12 @@ Architecture (`qwen35`): 64 blocks, every 4th is full attention (16 layers, 4 KV
 - **`CMAKE_CUDA_ARCHITECTURES`** comes from `nvidia-smi` (`89` for Ada). Compiling for one architecture is much faster than for the default set.
 - **ccache** speeds up rebuilds and is used when present; the build works without it.
 - OpenSSL is not needed: it only enables HTTPS model downloads inside llama-server, and `bonsai-server` passes a local path.
+- **Vulkan** (`BACKEND=vulkan`): `GGML_VULKAN=ON` and the patches from `patches/vulkan/` applied to
+  the clean checkout, nothing else. There is no architecture to pick; the shaders are compiled by
+  `glslc` at build time (`vulkan-shaders-gen`) and the driver specialises them. The Vulkan flash
+  attention takes mixed KV types as is, so `FA_ALL_QUANTS` has no counterpart. The patches are
+  applied after `git checkout --force`, so they always meet the pinned tree and `build` refuses
+  when the pin moved without them (`git apply --check`).
 
 ## Toolchain
 
@@ -38,13 +44,194 @@ Architecture (`qwen35`): 64 blocks, every 4th is full attention (16 layers, 4 KV
   that is harmless - `ldd llama-server` resolves `libcuda.so.1` to `/usr/lib/wsl/lib`, which
   comes first in the loader path. Next to a native driver of another version it can cause a
   driver/library version mismatch.
-- **Other GPUs:** the fork also carries `PTQ1_0` kernels for Vulkan, ROCm/HIP, Metal and the
-  CPU. This setup builds CUDA only.
+- **AMD through Vulkan** (`BACKEND=vulkan`): `deps` is tested on Debian 13 - `glslc`,
+  `libvulkan-dev`, `mesa-vulkan-drivers`, `vulkan-tools`; the package names are the same on
+  Ubuntu. It gates on a `/dev/dri/renderD*` node and on `vulkaninfo` seeing a device, which
+  needs the user in the `render` group. **Mesa >= 25.2** is what the numbers were measured
+  with; Debian 13 ships 25.0.7, which is 1.22x slower because `RADV_PERFTEST=nogttspill` is
+  ignored there, and `deps` warns about it. `trixie-backports` has 26.x. The fork also carries
+  ROCm/HIP and Metal kernels; untested. [Other GPU backends](#other-gpu-backends) has what
+  Vulkan delivers and why.
 
 Disk, measured: model 5.6 GB, `llama.cpp` checkout and build 1.9 GB, ccache ~0.25 GB, apt's
 CUDA toolkit with its dependencies ~5.4 GB. The binary links `libcudart` and `libcublas`
 dynamically, so the toolkit stays after the build. pi needs Node.js >= 22.19 (`engines` in its
 `package.json`) and takes 440 MB in `$BONSAI_HOME/pi`.
+
+## Other GPU backends
+
+CUDA is a choice here, not a constraint of the model: the fork carries `PTQ1_0` kernels for
+Vulkan, ROCm/HIP, Metal and the CPU. The Vulkan path was built and measured on an AMD RX 570
+(Polaris10/gfx803, 8 GiB, RADV) so the choice rests on numbers - first as the fork ships it
+(T-010, `runs/T-010-vulkan-rx570/`), then with a rewritten PTQ1_0 decode (T-016,
+`runs/T-016-ptq1_0-vulkan-decode/`, patch and logs there).
+
+**It works.** `-DGGML_VULKAN=ON` builds clean, every shader passes `glslc`, the server puts all
+layers on the Vulkan device, `q8_0`/`q4_0` KV with `-fa on` is accepted (`fa_kv_ok` lists both
+and only requires BF16 to match on both sides), and load takes 8 s. PTQ1_0 has the full pipeline
+set - `mul_mat_vec` for generation and the scalar `CREATE_MM` matmul a device without cooperative
+matrix takes. coopmat2 is deliberately absent for PTQ1_0 and is NVIDIA-only anyway.
+
+**As shipped it is about 20x too slow; with the T-016 decode about 5x.** At 48k, Mesa 26.1.2,
+`RADV_PERFTEST=nogttspill`, clocks `auto`:
+
+| | RX 570, shipped kernel | RX 570, T-016 decode | RTX 4060 Ti / CUDA |
+| --- | --- | --- | --- |
+| prompt processing | 3.8 tok/s | 54 tok/s (847-token prompt) | 451 tok/s |
+| generation | 1.58 tok/s (633 ms/token) | 7.0 tok/s (143 ms/token) | 36 tok/s |
+
+**The kernel was the ceiling, and the decode was the kernel.** `ptq1_0.glsl` as shipped
+decoded every weight element on its own: one byte load, a three-way range branch and a loop
+of up to four dependent multiply-mask steps (`v = (v*3) & 0xFF`, ~2.5 on average) to reach the
+wanted base-3 digit, because PTQ1_0 packs five trits per byte. Per 128-element block that is
+128 byte loads and ~320 serial ALU ops where Q4_0 loads one word per four elements and shifts.
+The same card runs Qwen2.5-3B `Q4_K_M` at 121 GB/s effective, which for 5.4 GB of weights would
+be ~22 tok/s; 1.58 meant the kernel was ~14x worse per byte, i.e. ALU-bound, which is also why
+the memory clock never ramped (the DPM governor watches memory traffic and saw none). The
+fork's own issue [#185](https://github.com/PrismML-Eng/llama.cpp/issues/185) has this kernel as
+committed-untested and slow: 0.7 tok/s on a Radeon 860M, ~9 tok/s on an RX 9070 XT.
+
+The T-016 rewrite replaces the recurrence with a 256-entry table, byte to five trits, generated
+from the CPU codec in `ggml-quants.c` so it is bit-exact by construction, held in shared memory
+through the same `init_iq_shmem` mechanism the IQ grids use, with each trit stored as a 2-bit
+two's-complement field so one `bitfieldExtract` yields the signed value. The block is read
+through a `block_ptq1_0_packed32` view (seven 32-bit words), so four consecutive elements
+(`mul_mat_vec`) cost one word load and eight (`mul_mm`) cost two. The element-to-byte mapping
+lives in one function, `ptq1_0_locate`, used by every consumer. Verified with
+`test-backend-ops -b Vulkan0 -p ptq1_0` for `MUL_MAT`, `MUL_MAT_ID`, `GET_ROWS` and `CPY`
+against the CPU backend, before and after. What it bought, 16k and 48k identical:
+
+| Path | before | after | Gain |
+| --- | --- | --- | --- |
+| generation (`mul_mat_vec`) | 632.96 ms/token | 142.56 ms/token | 4.4x |
+| prompt, 847 tokens (`mul_mm`) | 3.8 tok/s | 54.0 tok/s | 14x |
+
+Two things the numbers say about what is left. The memory clock now ramps on its own (1000 to
+1750 MHz during generation, where the shipped kernel sat at 300), so the kernel has become
+visible as memory traffic; and 143 ms/token is still ~3x the ~45 ms that Q4_K_M's per-byte
+efficiency would allow, so it is not bandwidth-bound yet. The remaining ALU cost is structural:
+`mul_mat_vec` hands each thread four consecutive elements, which is one trit position of four
+bytes, so every byte is loaded and looked up five times per token. A dedicated PTQ1_0 mat-vec
+kernel that keeps all five trits of a loaded word (the way the K-quant `mul_mat_vec_*` shaders
+own their block layout) is the next step, and a larger one; the ceiling for it is ~22 tok/s.
+Polaris has no integer-dot instruction, so the `mul_mat_vecq` route is not available here.
+
+**The environment is worth 1.76x on the shipped kernel, and getting it wrong looks like a kernel
+problem.** The first run, on Debian 13's Mesa 25.0.7 with clocks on `auto`, gave 0.94 tok/s.
+Three things moved it, measured one at a time at 16k:
+
+| Change | ms/token | Gain |
+| --- | --- | --- |
+| Mesa 25.0.7, clocks `auto` | 1067.92 | - |
+| Mesa 26.1.2 (trixie-backports), same clocks | 771.12 | 1.38x |
+| \+ `RADV_PERFTEST=nogttspill` | 632.96 | 1.22x |
+| \+ `power_dpm_force_performance_level=high` | 606.09 | 1.04x |
+
+- **The Mesa version matters most, and specifically for this quant.** 25.0.7 to 26.1.2 is 1.38x
+  here while the same upgrade moved a Qwen2.5-3B `Q4_K_M` control on the same card by 1.04x
+  (60.34 to 62.97 tok/s). Whatever the older RADV did to the PTQ1_0 shaders, it did it to those
+  and not to the standard quants.
+- **Memory placement costs a lot, for one buffer.** RADV puts buffers in GTT although VRAM is
+  free; `nogttspill` moves ~150 MiB back (GTT 473 to 322 MiB) and buys 1.22x. It needs
+  **Mesa >= 25.2** and is silently ignored below that, which is why an earlier attempt on 25.0.7
+  measured nothing. The ~150 MiB is the `Vulkan0 compute buffer` (150.28 MiB), which every graph
+  execution touches - that is why so few bytes are worth so much, and why the rest is not.
+  The other direction brackets it: `GGML_VK_PREFER_HOST_MEMORY` puts everything in host memory
+  (VRAM 21 MiB, GTT 6170 MiB) and costs 1.92x, 1213.57 ms/token. Note it is checked for
+  *presence*, so setting it to `0` still turns it on.
+- **The GTT that is left cannot be moved, and would not pay.** 322 MiB at 16k is
+  `token_embd.weight` at 265.23 MiB, the `Vulkan_Host compute buffer` at 36.29 MiB and ~17 MiB
+  the driver holds with nothing loaded at all - a floor of roughly 53 MiB even in theory. The
+  embedding stays on the CPU because the Vulkan backend has no PTQ1_0 path for that buffer type
+  (`cannot be used with preferred buffer type Vulkan_Host, using CPU instead`), which is a fork
+  change, not a setting. It would buy nothing either: a row lookup reads kilobytes per token, not
+  265 MiB. `--no-host` does not move it - GTT and ms/token are unchanged to three digits
+  (633.14 vs 633.20).
+- **The clocks barely matter once Mesa is current.** With the shipped kernel `pp_dpm_mclk` sits
+  at 300 MHz of an available 1750 under load while `sclk` is pinned at its top and
+  `gpu_busy_percent` reads 100 %; forcing the performance level raises mclk to 1750 and buys
+  1.18x on Mesa 25.0.7 but only 1.04x on 26.1.2. With the T-016 decode it ramps by itself.
+- **The context window costs nothing.** 48k and 16k give 633.06 and 632.96 ms/token before,
+  142.98 and 142.56 after.
+
+**So: CUDA for interactive use, Vulkan for batch.** 7 tok/s is a fifth of the 4060 Ti and
+54 tok/s prompt an eighth: a 4k-token agent prompt costs ~75 s before the first token, a
+10k-token localagent step ~25 minutes. That is fine for a task handed over and left alone
+(`bonsai-pi -p`, the localagent workflow) and not for a conversation, which is why `vulkan` is
+supported and not the default. How the setup does it, all of it measured above:
+
+- `BACKEND=vulkan` builds the fork with `GGML_VULKAN=ON` and `patches/vulkan/` applied; the
+  pinned `LLAMA_COMMIT` does not carry the decode until upstream takes it (T-017). Same
+  binary flags otherwise, same KV types, same `-fa on`.
+- `bonsai-server` exports `RADV_PERFTEST=nogttspill` (1.22x; needs Mesa >= 25.2, `deps` warns
+  below that). Nothing forces the clocks: with the new decode `mclk` ramps by itself, and the
+  knob needs root anyway.
+- The `dedicated` profile holds as is: 64k measured at 7 434 MiB of 8 192 on the RX 570,
+  141.56 ms/token (`runs/T-016-ptq1_0-vulkan-decode/measure-new-64k.out`), so the window
+  costs nothing here either and the pi budget is the same arithmetic.
+- `token_embd` stays on the CPU (265 MiB in GTT) and there is no Vulkan `mul_mat_vecq`; both
+  are fork work, neither is a setting.
+
+Two side findings from the same runs, both harmless: `token_embd.weight` (ptq1_0) "cannot be used
+with preferred buffer type Vulkan_Host, using CPU instead", so 265 MiB stays CPU-mapped even at
+`-ngl 99`; and only 16 layers carry a KV cache (the rest log as `filtered`), which is why 48k
+costs just 1222 MiB - K `q8_0` 799 MiB, V `q4_0` 423 MiB - and why a 48k window fits 8 GB at all.
+
+## RAM and build memory
+
+Measured on the RX 570 box (8 cores, 24 GB, no swap, Mesa 26.1.2), Vulkan backend, T-009.
+Raw samples and the build log: `runs/T-009-ram-and-build-memory/`.
+
+**Serving is cheap; loading is not.**
+
+| | RSS |
+| --- | --- |
+| llama-server peak while loading the model (`VmHWM`) | 5 841 MB |
+| resident once loaded, idle | 468 MB |
+| resident while generating | 622 MB |
+| page cache holding the GGUF | ~6 300 MB, reclaimable |
+
+The load peak is the 5.9 GB model file read through `mmap`; afterwards the pages are backed by
+the file and the kernel drops them under pressure, so the process settles below 700 MB.
+Generation adds ~150 MB and nothing grows with the context - the KV cache lives in VRAM. A
+machine with **8 GB of RAM serves this model comfortably**, and the page cache is what uses
+whatever is left over.
+
+**Building is the memory-hungry part, not serving.**
+
+| | |
+| --- | --- |
+| Peak across all compilers, `-j8`, ccache off | 5 735 MB |
+| Largest single translation unit | 4 439 MB |
+| Concurrent compilers at that peak | 4 |
+| Wall clock, `-j8` | 218 s |
+
+The 4.4 GB unit is `mul_mm.comp.cpp`, the generated Vulkan matmul shader permutations - its
+object file is 29 MB, six times the next largest. The shader generation step before it spawns
+up to 38 `glslc` processes at once, but they are small (430 MB together).
+
+So the binding constraint is one heavy unit plus whatever else `make` starts next to it, which
+is why `build.sh` no longer passes `-j $(nproc)` unconditionally: it allows ~2 GB per job and
+takes the lower of that and the core count, overridable with `BUILD_JOBS`. On the 8-core box
+with 16 GB free that is `-j7`; on an 8 GB machine it is `-j3`, where `-j8` would have put two
+heavy units side by side with no room for them.
+
+**In a VM, this model makes the guest look full.** The GGUF is read through `mmap`, so after a
+load the guest holds ~6 GB of page cache it will happily keep forever - `MemAvailable` stays
+high, but `MemFree` does not. A hypervisor without a balloon device in the guest cannot tell
+page cache from live data and can never take a touched page back, so the VM's host-side
+footprint ratchets up to whatever it was assigned and stays there. Measured on the RX 570 box:
+15.1 GB backed before a build, 16.2 GB after, against 13.8 GB still available inside. A
+management UI reporting the VM at 100 % of its RAM is therefore expected here and is not a
+shortage. Give such a guest a balloon device, or size it to what this actually needs - the
+5.8 GB load peak plus room for the build, so ~12 GB - rather than to the largest number that
+fits, or the guests together can overcommit the host even when each one looks idle.
+
+**Not measured:** the CUDA build. `nvcc` has a different memory profile from `g++` on generated
+shader code, and no NVIDIA GPU is reachable from the machines this was run on - the numbers above
+are the Vulkan path only. The box also had llama-server and the Docker inference node running
+throughout, which is why guest-wide usage peaked at 15.1 GB while the build itself accounts for
+5.7 GB of it.
 
 ## VRAM budget
 
@@ -265,6 +452,33 @@ dies during start. With the real model:
   logs `cancel task`), the server keeps running and answers the other session.
 - `run/` holds no session and no `server.pid` after each run.
 
+### A server on another machine
+
+`LISTEN_HOST` is what llama-server binds to, `SERVER_HOST` what the client side - `bonsai-pi`'s
+health and model checks, and the `baseUrl` written into pi's `models.json` - connects to. Both
+default to `127.0.0.1`, which is the whole setup on one machine. They were the same hardcoded
+literal until it turned out that the machine with the GPU and the machine you work on need not
+be the same one.
+
+To serve one GPU box to another host: `LISTEN_HOST=0.0.0.0 bonsai-server` there, then
+`SERVER_HOST=<box> ./install.sh pi` here and `bonsai-pi` as usual. `./install.sh pi` has to run
+again because pi keeps a written copy of the URL - the same drift as `CTX` and `PORT`.
+
+- **Autostart steps aside.** `bonsai-pi` starts and stops a server by pid and reads `SERVER_LOG`;
+  neither exists for someone else's process on another host. With a non-local `SERVER_HOST` it
+  therefore never starts one, says so once, and fails on the `/v1/models` check if nothing is
+  serving. `SERVER_AUTOSTART` keeps its meaning for a local server.
+- **There is no authentication.** The provider sends `apiKey: "none"` and llama-server asks for
+  nothing, so `LISTEN_HOST=0.0.0.0` offers the model to everyone who can reach the port. On a
+  network that is not yours, forward it instead - `ssh -N -L 8080:127.0.0.1:8080 <box>` - and
+  leave `SERVER_HOST` at `127.0.0.1`; the tunnel needs no setting at all.
+- **Latency is not the problem, bandwidth is not either.** A turn is one HTTP request and a
+  token stream; on a LAN the round trip disappears next to a 27B model's generation time.
+
+Verified: the URL that `config.env` derives for local, remote and remote-with-port, the
+`models.json` written from it, and the four autostart branches under `set -e`. Not yet run
+against a real remote server - the machine this was written on has no GPU.
+
 ## localagent workflow
 
 `bonsai-pi --localagent` runs a multi-agent build pipeline for this model. Its own file:
@@ -309,3 +523,8 @@ misleading 1.59x, is in [Performance](performance.md#speculative-decoding-tried-
 | Answer ends after exactly `MAX_TOKENS` | The output cap was hit. Raise `MAX_TOKENS` or lower `BUDGET`. |
 | `stopReason: length` well below `MAX_TOKENS`, near a compaction | pi's output clamp: `BUDGET` too large for `RESERVE_TOKENS - 4096`. See [Context budget](#context-budget). |
 | pi compacts every turn, most of the time goes into summarizing | `RESERVE_TOKENS`/`KEEP_RECENT_TOKENS` are unset or too large for `CTX`: `./install.sh pi`. See [Context budget](#context-budget). |
+| Vulkan: ~1.2x below the numbers here, GTT above 400 MiB at 16k | Mesa < 25.2: `RADV_PERFTEST=nogttspill` is ignored. `deps` warns; take `mesa-vulkan-drivers` from backports. See [Other GPU backends](#other-gpu-backends). |
+| Vulkan: VRAM reads a few MiB right after load | Normal. RADV moves the weights into VRAM on the first request. Judge by tok/s, and read VRAM and GTT together. |
+| Vulkan: ~2x slower, VRAM ~20 MiB, GTT ~6 GB | `GGML_VK_PREFER_HOST_MEMORY` is set. It is checked for presence, so `=0` also turns it on: unset it. |
+| `vulkaninfo` lists no device, `deps` dies on it | Your user is not in the `render` group: `usermod -aG render $USER`, log in again. |
+| `patch does not apply` from `build` | `LLAMA_COMMIT` moved and `patches/$BACKEND/` was not rebased. Rebase it, or check whether the pin already carries the change and delete the patch. |

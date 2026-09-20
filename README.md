@@ -1,35 +1,46 @@
 # bonsai-local
 
-Runs [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) fully on an 8 GB NVIDIA GPU, serves it with llama.cpp, and wires it into the [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) coding agent.
+Runs [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) fully on an 8 GB GPU - NVIDIA through CUDA at 36 tok/s, or AMD through Vulkan at 7 tok/s for batch use - serves it with llama.cpp, and wires it into the [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) coding agent.
 
 Stock llama.cpp cannot load this model: its `PTQ1_0` ternary quant needs the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp). This repo builds that fork, fetches the model, starts a tuned server and configures pi.
 
 ## Requirements
 
-Tested on Windows 11 + WSL2 with Ubuntu 26.04 and an RTX 4060 Ti 8 GB. [Toolchain](docs/dev.md#toolchain) says what is known beyond that.
+Two backends, chosen with `BACKEND` (default `cuda`):
 
-- Linux, native or WSL2, with a working NVIDIA driver (`nvidia-smi` runs; under WSL2 the driver is installed on the Windows side)
-- NVIDIA GPU with 8 GB VRAM, of which ~7.3 GB must be **free**: the GPU should drive no display, see [VRAM budget](docs/dev.md#vram-budget). Less does not work, the model does not run partially offloaded at usable speed
-- CUDA toolkit >= 12.4 with a host gcc it accepts; >= 12.8 for RTX 50xx. `./install.sh deps` installs it via apt, which yields 12.4 on Ubuntu 26.04 only
+| `BACKEND` | Tested on | Generation | For |
+| --- | --- | --- | --- |
+| `cuda` | Windows 11 + WSL2, Ubuntu 26.04, RTX 4060 Ti 8 GB | 36 tok/s | interactive use, the default |
+| `vulkan` | Debian 13, AMD RX 570 8 GB (RADV, Mesa 26.1) | 7 tok/s | **batch use**: `-p` runs and the localagent workflow left alone, not a conversation |
+
+[Toolchain](docs/dev.md#toolchain) says what is known beyond that, [Other GPU backends](docs/dev.md#other-gpu-backends) where the Vulkan numbers come from.
+
+- Linux, native or WSL2. CUDA: a working NVIDIA driver (`nvidia-smi` runs; under WSL2 it is installed on the Windows side). Vulkan: the `amdgpu` kernel driver and **Mesa >= 25.2** (Debian 13 ships 25.0.7; take `mesa-vulkan-drivers` from `trixie-backports`), and your user in the `render` group
+- A GPU with 8 GB VRAM, of which ~7.3 GB must be **free**: the GPU should drive no display, see [VRAM budget](docs/dev.md#vram-budget). Less does not work, the model does not run partially offloaded at usable speed
+- CUDA: toolkit >= 12.4 with a host gcc it accepts; >= 12.8 for RTX 50xx. `./install.sh deps` installs it via apt, which yields 12.4 on Ubuntu 26.04 only. Vulkan: `glslc`, the Vulkan headers and loader; `deps` installs them on Debian and Ubuntu
 - Node.js >= 22.19 for pi
-- ~14 GB free disk: 5.6 GB model, 1.9 GB build, ~5.4 GB for the CUDA toolkit from apt. ~9 GB when a CUDA toolkit is already installed
+- **8 GB RAM** to serve: the model is read through `mmap`, so llama-server peaks at 5.8 GB while loading and then sits below 700 MB, with the rest as reclaimable page cache. Building wants more headroom - a single Vulkan shader unit peaks at 4.4 GB - so `build` caps its parallelism at ~2 GB per job instead of `-j $(nproc)`; `BUILD_JOBS` overrides it. See [RAM and build memory](docs/dev.md#ram-and-build-memory)
+- ~14 GB free disk: 5.6 GB model, 1.9 GB build, ~5.4 GB for the CUDA toolkit from apt. ~9 GB when a CUDA toolkit is already installed, or with Vulkan
 
-Without apt, install the toolchain yourself (CUDA, gcc, cmake, git, python3) and skip `deps`: `./install.sh build model pi link`.
+Without apt, install the toolchain yourself (CUDA and gcc, or glslc and the Vulkan SDK; plus cmake, git, python3) and skip `deps`: `./install.sh build model pi link`.
 
 ## Install
 
 ```bash
 git clone https://github.com/voxlo-dev/bonsai-local.git   # private: needs GitHub access
 cd bonsai-local
-./install.sh
+./install.sh                    # NVIDIA
+BACKEND=vulkan ./install.sh     # AMD
 ```
+
+`BACKEND` has to be set for every later `./install.sh build` too (or exported): `build` decides on it which toolchain to use and which patches from [`patches/`](patches/) to apply to the fork. `bonsai-server` reads it as well.
 
 The default runs every step in order. Name one or more steps to run just those:
 
 | Step | Does |
 | --- | --- |
-| `deps` | apt toolchain: build tools, cmake, gcc-13, CUDA toolkit (asks for sudo, so run it in a real terminal) |
-| `build` | clones the fork at the pinned commit and builds `llama-server` (`FORCE=1` rebuilds) |
+| `deps` | apt toolchain for `BACKEND`: build tools, cmake, then gcc-13 and the CUDA toolkit, or glslc and the Vulkan headers (asks for sudo, so run it in a real terminal) |
+| `build` | clones the fork at the pinned commit, applies `patches/$BACKEND/`, builds `llama-server` (`FORCE=1` rebuilds) |
 | `model` | links the GGUF from the Hugging Face cache, or downloads and checksums it |
 | `pi` | installs its own pinned pi and writes its config: provider `local` as default, the context budget, `AGENTS.md`. A pi you already have and `~/.pi` stay untouched |
 | `link` | puts `bonsai-server` and `bonsai-pi` into `~/.local/bin` |
@@ -77,6 +88,8 @@ bonsai-server --port 9000
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
+| `BACKEND` | `cuda` | `cuda` or `vulkan`; read by `deps`, `build` and `bonsai-server`. `build` rebuilds by itself when it changes |
+| `BUILD_JOBS` | auto | parallel compile jobs; empty derives them from free RAM and core count, see [RAM and build memory](docs/dev.md#ram-and-build-memory) |
 | `CTX` | `64000` | context window in tokens (profile); 8 GB fits no more, see [VRAM budget](docs/dev.md#vram-budget) |
 | `KV_K` / `KV_V` | `q8_0` / `q4_0` | KV cache types for keys and values |
 | `EFFORT` | `medium` | chat-template reasoning effort: `low`, `medium`, `xhigh` |
@@ -86,11 +99,13 @@ bonsai-server --port 9000
 | `RESERVE_TOKENS` | `16000` (profile) | window pi holds back for the answer; it compacts above `CTX - RESERVE_TOKENS` |
 | `KEEP_RECENT_TOKENS` | `12000` (profile) | recent history a compaction keeps |
 | `PORT` | `8080` | server port |
+| `LISTEN_HOST` | `127.0.0.1` | address the server binds to; `0.0.0.0` to serve other machines — there is no authentication |
+| `SERVER_HOST` | `127.0.0.1` | address `bonsai-pi` and pi connect to; set it to run the server on [another machine](docs/dev.md#a-server-on-another-machine) |
 | `PI_VERSION` | `0.85.1` | pi version the context budget was measured with |
 | `SERVER_AUTOSTART` | `true` | let `bonsai-pi` start and stop the server |
 | `SERVER_START_TIMEOUT` | `300` | seconds `bonsai-pi` waits for the model to load |
 
-After changing the profile, `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, run `./install.sh pi` again so pi's config matches the server.
+After changing the profile, `CTX`, `SERVER_HOST`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, run `./install.sh pi` again so pi's config matches the server.
 
 The last three carry each other: pi's own defaults assume a 200k window and make it compact on every single turn at this size. [Context budget](docs/dev.md#context-budget) has the measurements and the constraints between them.
 
@@ -109,6 +124,23 @@ VRAM stays at ~7.3 GB at 48k and 7.75 GB at 64k: the KV cache is allocated in fu
 Generation is bandwidth-bound and already uses ~80 % of what the card can sustain, so there is
 little left to tune. [Performance](docs/performance.md) has the roofline and the optimizations
 that were tried and rejected.
+
+AMD RX 570 8 GB through Vulkan (RADV, Mesa 26.1.2), same KV types, with the PTQ1_0 decode from
+[`patches/vulkan`](patches/vulkan/):
+
+| Context | Prompt processing (847-token prompt) | Generation |
+| --- | --- | --- |
+| 16k | 54 tok/s | 7.0 tok/s |
+| 48k | 54 tok/s | 7.0 tok/s |
+| 64k | 54 tok/s | 7.1 tok/s |
+
+64k takes 7 434 MiB of 8 192, so the `dedicated` profile holds on this card too.
+
+Five times slower than the 4060 Ti, and eight times on prompts: a 4k-token agent prompt takes
+~75 s before the first token. That is batch territory - a task handed to `bonsai-pi -p` or the
+localagent workflow and left alone - and it is why `vulkan` is not the default. The fork's own
+Vulkan kernel did 0.94 tok/s on this card; [Other GPU backends](docs/dev.md#other-gpu-backends)
+has the way from there to 7.
 
 ## More
 

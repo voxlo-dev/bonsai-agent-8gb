@@ -93,9 +93,9 @@ system prompt, the child has no `dispatch` and no `AGENTS.md`, and the orchestra
 Two runs of the **same prompt** (a todo CLI: add/list/complete/remove over a JSON file, clear
 failures with a non-zero exit) on the same profile (`dedicated`, CTX 64000, BUDGET 8192), one
 before the rebuild and one after. Scripts and artifacts: `runs/T-013-localagent-cli/` and
-`runs/T-016-workflow-without-tdd/` (gitignored, kept), `report.sh` beside each.
+`runs/T-018-workflow-without-tdd/` (gitignored, kept), `report.sh` beside each.
 
-| | T-016, spec -> implement -> review | T-013, TDD behind a wall |
+| | T-018, spec -> implement -> review | T-013, TDD behind a wall |
 | --- | --- | --- |
 | Wall clock | 1:39:48 | 2:14:20 |
 | Turns | 124 (30 orchestrator + 94 agents) | 198 (60 + 138) |
@@ -110,7 +110,7 @@ cost: **the turn count is the bill**, and every turn burns a full thinking budge
 Where the time went, per agent:
 
 ```
-                          T-016      T-013
+                          T-018      T-013
 implementer               46:42      30:37
 reviewer                  17:54      12:03  (as test-author)
 orchestrator, between     19:57      37:05
@@ -132,7 +132,7 @@ the blindness.
 
 Read the table carefully, though: **the implementer got more expensive, not cheaper** (+16 min),
 because it now verifies itself, and **half the saving is an e2e step that did not run** - the
-T-016 orchestrator judged a single-process CLI to have no e2e surface, where T-013's ran e2e and
+T-018 orchestrator judged a single-process CLI to have no e2e surface, where T-013's ran e2e and
 produced a 317-line driver with 88 checks against a one-flow rule. Both calls are defensible under
 the skill, so that 17 minutes may come back on another run. The structural savings are the
 spec-architect (stubs gone) and the orchestrator (half the sub-steps, half the turns).
@@ -149,20 +149,20 @@ spec-architect (stubs gone) and the orchestrator (half the sub-steps, half the t
   block. Contract-compliant, never executed.
 - **The reviewer writes the tests from the criteria, before opening the production code.** Prompt
   order is the only lever here: tests written from the code pin what exists instead of what was
-  asked for. It is verifiable afterwards in the child's session log, and in T-016 both reviewers
+  asked for. It is verifiable afterwards in the child's session log, and in T-018 both reviewers
   held the order - spec, tests, run, *then* `todo.py`.
 - **The reviewer never edits production code.** Its own tests it may fix freely; code findings go
   back to the implementer in one batch, one rework round, then escalate. Otherwise the checker is
   also the author and nobody is checking. Only a violated acceptance criterion is a finding - this
   model overproduces rather than rubber-stamps, and an invented finding costs a full round.
 - **Turn budgets on the cheap steps** (e2e 12, docs 8). In T-013 they were the two steps meant to
-  be cheapest and together cost 26 minutes; in T-016 docs took 3:26 for a README of 42 lines
+  be cheapest and together cost 26 minutes; in T-018 docs took 3:26 for a README of 42 lines
   instead of 9:13 for one of 122.
 - **Nothing is enforced any more.** `wall.ts`, the `permission.read` blocks and the brief-path
   allowlist are deleted; what remains is prompt plus the orchestrator's own `git diff` and test run
   after each unit.
 
-## What T-016 did not prove
+## What T-018 did not prove
 
 - **The findings path never ran.** Both units came back clean, so the reviewer returned `DONE`
   twice and the rework round was never exercised. The reviews themselves are substantive - U1
@@ -175,4 +175,4 @@ spec-architect (stubs gone) and the orchestrator (half the sub-steps, half the t
 - Small breach worth watching: the U2 implementer ran `git diff` against the parent repo although
   the prompt told it to ignore it. One turn, but nothing stops that sort of thing but the prompt.
 
-Next round: [T-017](../backlog/T-017-workflow-cost.md).
+Next round: [T-019](../backlog/T-019-workflow-cost.md).

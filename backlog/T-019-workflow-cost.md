@@ -1,19 +1,19 @@
-# T-017 — Cut what the localagent workflow still costs per unit
+# T-019 — Cut what the localagent workflow still costs per unit
 
-- **Summary:** The rebuild works; now attack the three items the T-016 run left standing — the implementer's 32-minute self-verification, the orchestrator's 20 minutes of bookkeeping, and a reviewer whose findings path has never run
+- **Summary:** The rebuild works; now attack the three items the T-018 run left standing — the implementer's 32-minute self-verification, the orchestrator's 20 minutes of bookkeeping, and a reviewer whose findings path has never run
 - **Category:** spike
 - **Importance:** medium
 - **Effort:** M
-- **Depends on:** T-016 (its run is the evidence below)
+- **Depends on:** T-018 (its run is the evidence below)
 
 ## Why
 
-T-016 cut the run from 198 turns / 2:14 to 124 turns / 1:40 and removed the deadlock class
+T-018 cut the run from 198 turns / 2:14 to 124 turns / 1:40 and removed the deadlock class
 entirely. The numbers and the per-agent breakdown are in
 [`docs/localagent.md`](../docs/localagent.md#economics). What that run also showed is where the
 remaining bill sits, and it is no longer the harness:
 
-| | T-016 | T-013 |
+| | T-018 | T-013 |
 | --- | --- | --- |
 | implementer | 46:42 (U2 alone 32:20 / 36 turns) | 30:37 |
 | orchestrator between dispatches | 19:57 | 37:05 |
@@ -30,9 +30,9 @@ substantive — U1 names the `save(path, tasks=None)` data-loss hazard, U2 reaso
 two-line stderr — and both held the spec-before-code order, which the session logs show. But the
 one-batch findings path, the rework round and the attempt counter are all untested. If the
 reviewer waves a real defect through, the split buys nothing and the workflow is the wrong shape
-for this model; that is the finding T-016 said to stop on.
+for this model; that is the finding T-018 said to stop on.
 
-**Half of T-016's saving was an e2e step that did not run.** The orchestrator judged a
+**Half of T-018's saving was an e2e step that did not run.** The orchestrator judged a
 single-process CLI to have no e2e surface; T-013's judged the opposite and got a 317-line driver.
 Both are defensible under the skill as written, which means the run-to-run variance is larger than
 the next optimisation.

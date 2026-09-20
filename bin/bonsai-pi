@@ -2,7 +2,8 @@
 # Starts the pinned pi with its own config in PI_AGENT_DIR, set up for bonsai-server.
 # A global pi and ~/.pi are not used. Arguments go straight to pi.
 # With SERVER_AUTOSTART, starts bonsai-server in the background when none is running and stops it
-# once the last bonsai-pi session ends. Rationale: docs/dev.md#server-lifecycle.
+# once the last bonsai-pi session ends - only for a server on this machine; a remote SERVER_HOST
+# is expected to be serving already. Rationale: docs/dev.md#server-lifecycle.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 source "$ROOT/config.env"
@@ -12,9 +13,23 @@ die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
 
 [[ -x "$PI_BIN" ]] || die "pi not found at $PI_BIN - run ./install.sh pi"
 
-url="http://127.0.0.1:$PORT"
+url="$SERVER_URL"
 healthy() { curl -sf -o /dev/null --max-time 2 "$url/health"; }
 alive()   { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
+
+# Starting and stopping only makes sense for a server this script can own: a pid to signal and
+# a log to read. A remote one is somebody else's process, so autostart steps aside for it.
+case "$SERVER_HOST" in
+  127.0.0.1 | ::1 | localhost)
+    autostart="$SERVER_AUTOSTART"
+    ;;
+  *)
+    autostart=false
+    if [[ "$SERVER_AUTOSTART" == "true" ]]; then
+      say "SERVER_HOST is $SERVER_HOST, not this machine - expecting a server there, starting none"
+    fi
+    ;;
+esac
 
 # Sessions register under run/, guarded by a lock, so a second bonsai-pi shares the server and
 # only the last one to leave stops it. server.pid exists only for a server bonsai-pi started.
@@ -41,7 +56,7 @@ cleanup() {
   flock -u 9
 }
 
-if [[ "$SERVER_AUTOSTART" == "true" ]]; then
+if [[ "$autostart" == "true" ]]; then
   flock 9
   prune
   touch "$run/sessions/$$"
@@ -75,7 +90,7 @@ if [[ "$SERVER_AUTOSTART" == "true" ]]; then
 fi
 
 curl -sf --max-time 2 "$url/v1/models" | grep -q "\"$MODEL_ALIAS\"" \
-  || die "no bonsai-server with model $MODEL_ALIAS on port $PORT - start bonsai-server, or set SERVER_AUTOSTART=true"
+  || die "no bonsai-server with model $MODEL_ALIAS at $url - start bonsai-server, or set SERVER_AUTOSTART=true"
 
 # pi handles Ctrl+C itself. Uncaught, SIGINT would also end this script without its EXIT trap;
 # caught, bash resets it for pi, which still gets it as usual.
