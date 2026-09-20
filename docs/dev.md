@@ -320,7 +320,8 @@ stripped), and the workflow puts test paths in the brief exactly when it drops t
 
 **Flag order.** pi hands an unknown flag the next argument as its value when that argument does
 not start with `-`. Extension flags count as unknown there, so `bonsai-pi --localagent "task"`
-swallows the task. Use `bonsai-pi --localagent` and type the task, or `--localagent -p "task"`.
+swallows the task. `--` ends option parsing and makes the rest the prompt:
+`bonsai-pi --localagent -- "task"`, with or without `-p`.
 
 Verified against a scripted stand-in endpoint that plays orchestrator and implementer: without
 the flag no `dispatch` and no skill; with it the orchestrator prompt and the skill are in the
