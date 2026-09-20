@@ -82,12 +82,22 @@ measured one at a time at 16k:
   here while the same upgrade moved a Qwen2.5-3B `Q4_K_M` control on the same card by 1.04x
   (60.34 to 62.97 tok/s). Whatever the older RADV did to the PTQ1_0 shaders, it did it to those
   and not to the standard quants.
-- **Memory placement does cost something.** RADV puts buffers in GTT although VRAM is free;
-  `nogttspill` moves ~150 MiB back (GTT 473 to 322 MiB) and buys 1.22x. It needs **Mesa >= 25.2**
-  and is silently ignored below that, which is why an earlier attempt on 25.0.7 measured nothing.
-  Note the size of the effect against the size of the move: 150 MiB per token over the measured
-  5.0 GT/s x16 link would be ~19 ms, and the actual gain was 138 ms - GTT-resident buffers cost
-  far more than their bandwidth suggests.
+- **Memory placement costs a lot, for one buffer.** RADV puts buffers in GTT although VRAM is
+  free; `nogttspill` moves ~150 MiB back (GTT 473 to 322 MiB) and buys 1.22x. It needs
+  **Mesa >= 25.2** and is silently ignored below that, which is why an earlier attempt on 25.0.7
+  measured nothing. The ~150 MiB is the `Vulkan0 compute buffer` (150.28 MiB), which every graph
+  execution touches - that is why so few bytes are worth so much, and why the rest is not.
+  The other direction brackets it: `GGML_VK_PREFER_HOST_MEMORY` puts everything in host memory
+  (VRAM 21 MiB, GTT 6170 MiB) and costs 1.92x, 1213.57 ms/token. Note it is checked for
+  *presence*, so setting it to `0` still turns it on.
+- **The GTT that is left cannot be moved, and would not pay.** 322 MiB at 16k is
+  `token_embd.weight` at 265.23 MiB, the `Vulkan_Host compute buffer` at 36.29 MiB and ~17 MiB
+  the driver holds with nothing loaded at all - a floor of roughly 53 MiB even in theory. The
+  embedding stays on the CPU because the Vulkan backend has no PTQ1_0 path for that buffer type
+  (`cannot be used with preferred buffer type Vulkan_Host, using CPU instead`), which is a fork
+  change, not a setting. It would buy nothing either: a row lookup reads kilobytes per token, not
+  265 MiB. `--no-host` does not move it - GTT and ms/token are unchanged to three digits
+  (633.14 vs 633.20).
 - **The clocks barely matter once Mesa is current.** Under load `pp_dpm_mclk` sits at 300 MHz of
   an available 1750 while `sclk` is pinned at its top and `gpu_busy_percent` reads 100 %; forcing
   the performance level raises mclk to 1750 and buys 1.18x on Mesa 25.0.7 but only 1.04x on
