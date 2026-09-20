@@ -44,6 +44,9 @@ if [[ "$SERVER_AUTOSTART" == "true" ]]; then
   trap 'exit 129' HUP
   trap 'exit 143' TERM
   trap 'exit 130' INT
+  trap 'exit 131' QUIT
+  # A server left behind by a session that died without its trap (see docs/dev.md#server-lifecycle)
+  # is adopted here: its pid stays in server.pid, so this session stops it when it leaves.
   pid="$(cat "$run/server.pid" 2>/dev/null || true)"
   if ! healthy && ! alive "$pid"; then
     say "starting bonsai-server in the background, log: $SERVER_LOG"
@@ -58,7 +61,7 @@ if [[ "$SERVER_AUTOSTART" == "true" ]]; then
   if ! healthy; then
     say "waiting for the model to load"
     for ((i = 0; i < SERVER_START_TIMEOUT; i++)); do
-      healthy && break
+      healthy && { say "server ready after ${i}s, starting pi"; break; }
       alive "$pid" || die "bonsai-server exited during start - see $SERVER_LOG"
       sleep 1
     done
