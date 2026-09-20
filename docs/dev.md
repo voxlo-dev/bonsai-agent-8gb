@@ -216,6 +216,17 @@ takes the lower of that and the core count, overridable with `BUILD_JOBS`. On th
 with 16 GB free that is `-j7`; on an 8 GB machine it is `-j3`, where `-j8` would have put two
 heavy units side by side with no room for them.
 
+**In a VM, this model makes the guest look full.** The GGUF is read through `mmap`, so after a
+load the guest holds ~6 GB of page cache it will happily keep forever - `MemAvailable` stays
+high, but `MemFree` does not. A hypervisor without a balloon device in the guest cannot tell
+page cache from live data and can never take a touched page back, so the VM's host-side
+footprint ratchets up to whatever it was assigned and stays there. Measured on the RX 570 box:
+15.1 GB backed before a build, 16.2 GB after, against 13.8 GB still available inside. A
+management UI reporting the VM at 100 % of its RAM is therefore expected here and is not a
+shortage. Give such a guest a balloon device, or size it to what this actually needs - the
+5.8 GB load peak plus room for the build, so ~12 GB - rather than to the largest number that
+fits, or the guests together can overcommit the host even when each one looks idle.
+
 **Not measured:** the CUDA build. `nvcc` has a different memory profile from `g++` on generated
 shader code, and no NVIDIA GPU is reachable from the machines this was run on - the numbers above
 are the Vulkan path only. The box also had llama-server and the Docker inference node running
