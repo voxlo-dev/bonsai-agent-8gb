@@ -150,18 +150,37 @@ reopened.
 
 ## What is left
 
-**Memory overclock** is the only remaining lever that works regardless of workload, and it is
-not configured here because it belongs to the host, not to this repo. Decode scales linearly
-with bandwidth, so every percent of memory clock is a percent of tok/s:
+Nothing on the card. Memory overclocking was the last candidate - decode scales linearly with
+bandwidth, so it is the one lever that works regardless of workload - and it was measured on the
+reference machine, host-side under Windows because under WSL2 the Windows driver owns the GPU:
 
-- P2 → P0 alone would restore 2.8 % (8751 → 9001 MHz)
-- GDDR6 on this part commonly takes an offset to ~19.5-20 Gbps, i.e. **+10-14 %, roughly +3 to
-  +5 tok/s**
+| Setting | tok/s | vs. reference |
+| --- | --- | --- |
+| `nvidia-smi -lmc 9001` (P0 lock) | 35.68 | reference |
+| Power limit 160 → 175 W (109 %) | 35.69 | ±0 |
+| Memory offset +100 MHz | 35.96 | +0.8 % |
+| **Memory offset +200 MHz** | **36.44** | **+2.1 %** |
+| Memory offset +300 MHz | 36.28 | +1.7 % |
 
-Under WSL2 this has to be set on the Windows side (e.g. MSI Afterburner); `nvidia-smi` cannot do
-it on a GeForce card. It is reversible, and it should be verified by measurement rather than
-assumed: GDDR6 error correction degrades throughput silently instead of crashing when pushed too
-far, so an offset that looks stable can still be slower.
+**+2 %, about 0.76 tok/s.** The gain tracks the clock almost exactly - +2.2 % clock for +2.1 %
+throughput - which is the cleanest confirmation in this file that decode is bandwidth-bound and
+nothing else. It is also the whole story: this part accepts roughly +200 MHz, not the four-digit
+offsets GDDR6 sometimes takes, and a linear law on a small offset gives a small number.
+
+For a host-side setting that has to be re-applied after driver updates and cannot live in this
+repo, +2 % is not worth planning around. Leaving it set does no harm.
+
+**The power limit does nothing.** 160 → 175 W moved the number by 0.01 tok/s. The `SW Power Cap`
+that shows as active throttles the core, and the core is at 9 % utilization - it was never the
+constraint. Locking the memory clock to P0 produced no measurable change either; whether the lock
+does not take effect through WSL2 or the 2.8 % simply does not materialize was not separated,
+because at this size it does not matter.
+
+Method note for anyone repeating this: the GDDR6 error-replay wall was **never reached**. Above
+~+250 MHz Afterburner stops applying the offset, so the dip at +300 is the offset not arriving,
+not memory errors. The caution still stands on a board that allows more - error replay degrades
+throughput silently instead of crashing, so an offset that looks stable can still be slower, and
+every step needs a measurement rather than an absence of crashes.
 
 The other honest answer is that **the setting with the largest effect on wall-clock time is not a
 speed setting at all**. A compaction costs a summarization call plus a full prompt reprocess of
