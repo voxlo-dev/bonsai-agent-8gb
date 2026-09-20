@@ -39,12 +39,68 @@ Architecture (`qwen35`): 64 blocks, every 4th is full attention (16 layers, 4 KV
   comes first in the loader path. Next to a native driver of another version it can cause a
   driver/library version mismatch.
 - **Other GPUs:** the fork also carries `PTQ1_0` kernels for Vulkan, ROCm/HIP, Metal and the
-  CPU. This setup builds CUDA only.
+  CPU. This setup builds CUDA only, and [Other GPU backends](#other-gpu-backends) says what
+  Vulkan actually delivers.
 
 Disk, measured: model 5.6 GB, `llama.cpp` checkout and build 1.9 GB, ccache ~0.25 GB, apt's
 CUDA toolkit with its dependencies ~5.4 GB. The binary links `libcudart` and `libcublas`
 dynamically, so the toolkit stays after the build. pi needs Node.js >= 22.19 (`engines` in its
 `package.json`) and takes 440 MB in `$BONSAI_HOME/pi`.
+
+## Other GPU backends
+
+CUDA is a choice here, not a constraint of the model: the fork carries `PTQ1_0` kernels for
+Vulkan, ROCm/HIP, Metal and the CPU. The Vulkan path was built and measured on an AMD RX 570
+(Polaris10/gfx803, 8 GiB, RADV, Mesa 25.0.7) so the choice rests on numbers. Logs and scripts:
+`runs/T-010-vulkan-rx570/`.
+
+**It works.** `-DGGML_VULKAN=ON` builds clean, every shader passes `glslc`, the server puts all
+layers on the Vulkan device, `q8_0`/`q4_0` KV with `-fa on` is accepted (`fa_kv_ok` lists both
+and only requires BF16 to match on both sides), and load takes 8 s. PTQ1_0 has the full pipeline
+set - `mul_mat_vec` for generation and the scalar `CREATE_MM` matmul a device without cooperative
+matrix takes. coopmat2 is deliberately absent for PTQ1_0 and is NVIDIA-only anyway.
+
+**It is about 40x too slow.**
+
+| | RX 570 / Vulkan | RTX 4060 Ti / CUDA |
+| --- | --- | --- |
+| prompt processing | 2.8-2.9 tok/s | 451 tok/s |
+| generation | 0.94 tok/s | 36 tok/s |
+
+Four things it is *not*, each ruled out by measurement:
+
+- **Not memory placement.** At 48k the card sat at VRAM 6413 MiB + GTT 913 MiB although the VRAM
+  heap (7936 MiB) had room - that GTT use is RADV placement, not overflow. Dropping to 16k and
+  adding `--no-host` moved the per-token time by 4 ms out of 1100. `RADV_PERFTEST=nogttspill`
+  would work around the RADV bug behind it but needs Mesa >= 25.2, so on 25.0.7 it is silently
+  ignored; it addresses a proven non-cause either way.
+- **Not the clocks.** Under load `pp_dpm_mclk` stays at 300 MHz of an available 1750 while `sclk`
+  is pinned at its top and `gpu_busy_percent` reads 100 %. Forcing
+  `power_dpm_force_performance_level=high` does raise mclk to 1750 and buys 1067.92 -> 906.33
+  ms/token. **5.8x the memory bandwidth for 1.18x the speed** is what an ALU-bound kernel looks
+  like.
+- **Not the driver or the card.** The fork's own issue
+  [#185](https://github.com/PrismML-Eng/llama.cpp/issues/185) has the Vulkan PTQ1_0 kernel as
+  committed-untested and slow: 0.7 tok/s on a Radeon 860M, and ~9 tok/s on an RX 9070 XT - a
+  current flagship with cooperative matrix, fp16 and roughly ten times the bandwidth, on the same
+  RADV. A different driver cannot move a ceiling that a 9070 XT also hits.
+- **Not the build.** The same binary on the same card runs Qwen2.5-3B Q4_K_M at 60.34 tok/s
+  generation and 171 tok/s prompt.
+
+What is left is the kernel. `ptq1_0.glsl` decodes every weight element with a serial base-3
+recurrence (`v = (v*3) & 0xFF`, up to 4 dependent steps, ~2.5 on average) because PTQ1_0 packs
+five trits per byte; CUDA has a dedicated MMQ instance
+(`template-instances/mmq-instance-ptq1_0.cu` with its tile loaders) and Vulkan has no equivalent.
+A lookup table (one byte to five trits) instead of the recurrence is the obvious fix, and it
+belongs in the fork against issue #185.
+
+**So: NVIDIA stays a requirement**, and the backend is not a `config.env` setting. Vulkan is a
+working port of this model, not a usable one.
+
+Two side findings from the same run, both harmless: `token_embd.weight` (ptq1_0) "cannot be used
+with preferred buffer type Vulkan_Host, using CPU instead", so 265 MiB stays CPU-mapped even at
+`-ngl 99`; and only 16 layers carry a KV cache (the rest log as `filtered`), which is why 48k
+costs just 1222 MiB - K `q8_0` 799 MiB, V `q4_0` 423 MiB - and why a 48k window fits 8 GB at all.
 
 ## VRAM budget
 
