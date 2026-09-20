@@ -12,7 +12,8 @@ This repo is **not an application**. It is a reproducible setup: bash scripts th
 | `profiles/{dedicated,display}.env` | `CTX` and the four budget values, per GPU situation (`PROFILE`, default `dedicated`). They constrain each other, so they move together |
 | `install.sh` | Step runner: `deps build model pi link`, all of them by default |
 | `scripts/lib.sh` | Sourced first by every step; sources `config.env` and defines `log`/`warn`/`die`/`has` |
-| `scripts/{deps,build,model,pi}.sh` | One install step each, individually re-runnable and idempotent |
+| `scripts/{deps,build,model,pi}.sh` | One install step each, individually re-runnable and idempotent. `deps` and `build` branch on `BACKEND` (`cuda`, `vulkan`) |
+| `patches/{backend}/*.patch` | Applied by `build` to the fork at `LLAMA_COMMIT`, in name order, for that backend only. Today: the PTQ1_0 Vulkan decode (T-016), until upstream takes it |
 | `bin/bonsai-server` | The launcher. Sources `config.env` **directly**, not through `lib.sh` |
 | `bin/bonsai-pi` | Starts the pinned pi with `PI_CODING_AGENT_DIR` set to `PI_AGENT_DIR`, and starts/stops `bonsai-server` around it when none runs. State in `$BONSAI_HOME/run/`. Same sourcing as `bonsai-server` |
 | `pi/pi-agents.md` | Runtime artifact, copied to `$PI_AGENT_DIR/AGENTS.md`. **Not this file** |
@@ -25,7 +26,7 @@ This repo is **not an application**. It is a reproducible setup: bash scripts th
 
 ## Build / test / run
 
-- Build: `./install.sh` (or a single step: `./install.sh build`; `FORCE=1 ./install.sh build` rebuilds)
+- Build: `./install.sh` (or a single step: `./install.sh build`; `FORCE=1 ./install.sh build` rebuilds; `BACKEND=vulkan` for AMD)
 - Test:  **none** — there is no test framework; see Conventions
 - Run:   `bonsai-pi` (starts the server itself), or `bonsai-server` first to keep it running
 - Version: unversioned; the repo pins what matters instead (`LLAMA_COMMIT`, `MODEL_REV`, `MODEL_SHA256`, `PI_VERSION` in `config.env`)
@@ -33,7 +34,7 @@ This repo is **not an application**. It is a reproducible setup: bash scripts th
 ## Conventions
 
 - **Every non-default choice is justified in `docs/dev.md`, with the measurement behind it.** That is the repo's actual product — the scripts are short, the reasons are not. A new flag or setting without a `docs/dev.md` entry is incomplete.
-- **Pins are deliberate.** `LLAMA_COMMIT`, `MODEL_REV` and `MODEL_SHA256` exist because the model needs a fork that mainline llama.cpp has not absorbed. Moving a pin means re-testing load and speed. `PI_VERSION` pins the compaction code the context budget was measured against; moving it means re-checking [`docs/dev.md`](docs/dev.md#context-budget).
+- **Pins are deliberate.** `LLAMA_COMMIT`, `MODEL_REV` and `MODEL_SHA256` exist because the model needs a fork that mainline llama.cpp has not absorbed. Moving a pin means re-testing load and speed, and checking that `patches/` still applies (`build` refuses when it does not). `PI_VERSION` pins the compaction code the context budget was measured against; moving it means re-checking [`docs/dev.md`](docs/dev.md#context-budget).
 - **Steps stay idempotent.** Each script checks whether its work is already done and exits early.
 - **Nothing is installed into the repo.** Build output, the model and pi's config all live outside it.
 - **Nothing is installed into the user's own tools.** No global npm package, nothing under `~/.pi`: a user's existing pi keeps its providers, defaults and compaction settings.
@@ -43,6 +44,7 @@ This repo is **not an application**. It is a reproducible setup: bash scripts th
 There is no test suite, and adding one was considered and declined (bash, no framework, one user). Verify by observation instead:
 
 - Server flags: start it and query `http://127.0.0.1:8080/props`, or render a conversation through `/apply-template` to see what the chat template actually produces
+- The Vulkan path: `runs/T-016-ptq1_0-vulkan-decode/measure.sh` on the GPU box (generation and an 847-token prompt at a given window); judge by tok/s, not by VRAM, which RADV reports meaningfully only after the first request
 - pi's config: read back `$BONSAI_HOME/pi-agent/{models,settings}.json`
 - pi's behaviour: its session logs are JSONL at `$BONSAI_HOME/pi-agent/sessions/{cwd-slug}/` (sessions before the private instance: `~/.pi/agent/sessions/`), one entry per message, with `usage` token counts and `compaction` records — that is where a context problem is visible
 - `bash -n` on any script touched

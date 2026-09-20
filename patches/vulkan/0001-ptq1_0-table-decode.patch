@@ -1,0 +1,330 @@
+From 3a81c141779577b81c40b8679eee616b99705ee2 Mon Sep 17 00:00:00 2001
+From: voxlo-dev <leofemu@gmail.com>
+Date: Sun, 20 Sep 2026 09:01:49 -0400
+Subject: [PATCH] vulkan: decode PTQ1_0 through a byte-to-trits table and word
+ loads
+
+The PTQ1_0 shaders decoded every weight element on its own: one byte load, a
+three-way range branch and a loop of up to four dependent multiply-mask steps
+(v = (v*3) & 0xFF) to reach the wanted base-3 digit. Per 128-element block that
+is 128 byte loads and ~320 serial ALU ops, which is why the kernel ran ALU-bound
+at 1.6 tok/s on an RX 570 while Q4_K_M on the same card is bandwidth-bound (#185).
+
+Replace it with a 256-entry table, byte -> five trits, generated from the CPU
+codec in ggml-quants.c (q = (uint8_t)(b * 3^n); trit = (q * 3) >> 8) and stored
+as 2-bit two's-complement fields so a single bitfieldExtract yields the signed
+value. The table lives in shared memory and is filled by init_iq_shmem, the same
+mechanism the IQ grids use. The block is read through a new
+block_ptq1_0_packed32 (seven 32-bit words) so four or eight consecutive elements
+cost one or two word loads. The element -> byte mapping now lives in one place,
+ptq1_0_locate in ptq1_0.glsl, used by mul_mat_vec (dequantize/dequantize4),
+mul_mm (eight elements per group) and dequant_ptq1_0.comp.
+
+Bit-exact by construction: test-backend-ops -b Vulkan0 -p ptq1_0 passes for
+MUL_MAT, MUL_MAT_ID, GET_ROWS and CPY against the CPU backend, as before.
+
+Measured on Ternary-Bonsai-2-27B-PTQ1_0 (RX 570, RADV, Mesa 26.1.2,
+RADV_PERFTEST=nogttspill, clocks auto, q8_0/q4_0 KV, -fa on):
+
+                     before      after
+  generation, 16k    633 ms/tok  143 ms/tok   (1.58 -> 7.0 tok/s)
+  generation, 48k    633 ms/tok  143 ms/tok
+  prompt, 847 tok    3.8 tok/s   54 tok/s
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ .../vulkan-shaders/dequant_funcs.glsl         |  7 +-
+ .../vulkan-shaders/dequant_ptq1_0.comp        | 40 +++-----
+ .../vulkan-shaders/mul_mm_funcs.glsl          | 12 ++-
+ .../ggml-vulkan/vulkan-shaders/ptq1_0.glsl    | 98 ++++++++++++++-----
+ .../src/ggml-vulkan/vulkan-shaders/types.glsl | 46 +++++++++
+ 5 files changed, 143 insertions(+), 60 deletions(-)
+
+diff --git a/ggml/src/ggml-vulkan/vulkan-shaders/dequant_funcs.glsl b/ggml/src/ggml-vulkan/vulkan-shaders/dequant_funcs.glsl
+index 88be136..670d22e 100644
+--- a/ggml/src/ggml-vulkan/vulkan-shaders/dequant_funcs.glsl
++++ b/ggml/src/ggml-vulkan/vulkan-shaders/dequant_funcs.glsl
+@@ -130,13 +130,10 @@ vec4 dequantize4(uint ib, uint iqs, uint a_offset) {
+ #include "ptq1_0.glsl"
+ 
+ vec2 dequantize(uint ib, uint iqs, uint a_offset) {
+-    return vec2(ptq1_0_trit(ib, a_offset, iqs), ptq1_0_trit(ib, a_offset, iqs + 1u));
++    return ptq1_0_dequant2(a_offset + ib, iqs);
+ }
+ vec4 dequantize4(uint ib, uint iqs, uint a_offset) {
+-    return vec4(ptq1_0_trit(ib, a_offset, iqs),
+-                ptq1_0_trit(ib, a_offset, iqs + 1u),
+-                ptq1_0_trit(ib, a_offset, iqs + 2u),
+-                ptq1_0_trit(ib, a_offset, iqs + 3u));
++    return ptq1_0_dequant4(a_offset + ib, iqs);
+ }
+ #endif
+ 
+diff --git a/ggml/src/ggml-vulkan/vulkan-shaders/dequant_ptq1_0.comp b/ggml/src/ggml-vulkan/vulkan-shaders/dequant_ptq1_0.comp
+index 53baf41..785df24 100644
+--- a/ggml/src/ggml-vulkan/vulkan-shaders/dequant_ptq1_0.comp
++++ b/ggml/src/ggml-vulkan/vulkan-shaders/dequant_ptq1_0.comp
+@@ -5,35 +5,17 @@
+ layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+ 
+ layout (binding = 0) readonly buffer A {block_ptq1_0 data_a[];};
++layout (binding = 0) readonly buffer A_PACKED32 {block_ptq1_0_packed32 data_a_packed32[];};
+ layout (binding = 1) writeonly buffer D {D_TYPE data_b[];};
+ 
+-// One invocation per 8 elements: 16 invocations cover a 128-weight block. Element
+-// order follows the CPU codec (16-byte qs chunk, 8-byte qs chunk, then qh), so the
+-// index maths lives in one place rather than being reproduced per shader.
+-float ptq1_0_trit_l(uint ib, uint e) {
+-    uint b;
+-    uint n;
+-    if (e < 80u) {
+-        b = uint(data_a[ib].qs[e & 15u]);
+-        n = e >> 4u;
+-    } else if (e < 120u) {
+-        const uint t = e - 80u;
+-        b = uint(data_a[ib].qs[16u + (t & 7u)]);
+-        n = t >> 3u;
+-    } else {
+-        const uint t = e - 120u;
+-        b = uint(data_a[ib].qh[t & 1u]);
+-        n = t >> 1u;
+-    }
+-
+-    uint v = b;
+-    for (uint i = 0u; i < n; ++i) {
+-        v = (v * 3u) & 0xFFu;
+-    }
+-    return float(int((v * 3u) >> 8u) - 1);
+-}
++#include "ptq1_0.glsl"
+ 
++// One invocation per 8 elements: 16 invocations cover a 128-weight block. Element
++// order follows the CPU codec (16-byte qs chunk, 8-byte qs chunk, then qh); the
++// index maths lives in ptq1_0.glsl rather than being reproduced per shader.
+ void main() {
++    init_iq_shmem(gl_WorkGroupSize);
++
+     const uint i = gl_WorkGroupID.x * 4 + gl_LocalInvocationID.x / 64;
+ 
+     const uint tid = gl_LocalInvocationID.x % 64;
+@@ -48,7 +30,11 @@ void main() {
+ 
+     const float d = float(data_a[ib].d);
+ 
+-    [[unroll]] for (uint l = 0; l < 8; ++l) {
+-        data_b[b_idx + l] = D_TYPE(ptq1_0_trit_l(ib, 8*il + l) * d);
++    vec4 lo, hi;
++    ptq1_0_dequant8(ib, 8*il, lo, hi);
++
++    [[unroll]] for (uint l = 0; l < 4; ++l) {
++        data_b[b_idx + l]     = D_TYPE(lo[l] * d);
++        data_b[b_idx + 4 + l] = D_TYPE(hi[l] * d);
+     }
+ }
+diff --git a/ggml/src/ggml-vulkan/vulkan-shaders/mul_mm_funcs.glsl b/ggml/src/ggml-vulkan/vulkan-shaders/mul_mm_funcs.glsl
+index 3125a3f..18f30af 100644
+--- a/ggml/src/ggml-vulkan/vulkan-shaders/mul_mm_funcs.glsl
++++ b/ggml/src/ggml-vulkan/vulkan-shaders/mul_mm_funcs.glsl
+@@ -161,12 +161,14 @@ void load_a_to_shmem(const uint pos_a, const uint row, const uint col, const uin
+ 
+             const float d = float(data_a[ib].d);
+ 
++            vec4 lo, hi;
++            ptq1_0_dequant8(ib, e0, lo, hi);
++
+             const uint k_pair = row * LOAD_VEC_A / 2;
+-            [[unroll]] for (uint l = 0; l < 4; ++l) {
+-                store_a(col, k_pair + l, FLOAT_TYPEV2(
+-                    ptq1_0_trit(ib, 0u, e0 + 2u*l)      * d,
+-                    ptq1_0_trit(ib, 0u, e0 + 2u*l + 1u) * d));
+-            }
++            store_a(col, k_pair,     FLOAT_TYPEV2(lo.xy * d));
++            store_a(col, k_pair + 1, FLOAT_TYPEV2(lo.zw * d));
++            store_a(col, k_pair + 2, FLOAT_TYPEV2(hi.xy * d));
++            store_a(col, k_pair + 3, FLOAT_TYPEV2(hi.zw * d));
+ #elif defined(DATA_A_Q1_0)
+             const uint idx = pos_a + col * p.stride_a / LOAD_VEC_A + row;
+ 
+diff --git a/ggml/src/ggml-vulkan/vulkan-shaders/ptq1_0.glsl b/ggml/src/ggml-vulkan/vulkan-shaders/ptq1_0.glsl
+index 7eedd83..5388810 100644
+--- a/ggml/src/ggml-vulkan/vulkan-shaders/ptq1_0.glsl
++++ b/ggml/src/ggml-vulkan/vulkan-shaders/ptq1_0.glsl
+@@ -1,38 +1,90 @@
+ #ifndef PTQ1_0_GLSL
+ #define PTQ1_0_GLSL
+ 
+-// Shared PTQ1_0 trit accessor. Lives in its own header because two consumers need it
+-// from different include chains: dequant_funcs.glsl (mul_mat_vec, get_rows,
+-// copy_from_quant) and mul_mm.comp (via mul_mm_funcs.glsl), and mul_mm.comp does not
+-// include dequant_funcs.glsl. Duplicating it would leave two copies that must stay in
+-// step with the CPU codec in ggml-quants.c, where a divergence shows up as wrong
+-// matmul results rather than a build error.
++// Shared PTQ1_0 decode. Lives in its own header because three consumers need it from
++// different include chains: dequant_funcs.glsl (mul_mat_vec, get_rows, copy_from_quant),
++// mul_mm.comp (via mul_mm_funcs.glsl) and dequant_ptq1_0.comp. Duplicating it would
++// leave copies that must stay in step with the CPU codec in ggml-quants.c, where a
++// divergence shows up as wrong matmul results rather than a build error.
+ //
+-// Element order is not positional: a 16-byte chunk of qs where byte j carries
+-// elements t*16+j, then an 8-byte chunk carrying 80 + t*8 + (j-16), then qh at four
+-// trits per byte carrying 120 + t*2 + h. Trits come out by the base-3 remainder
+-// recurrence t = (v*3)>>8, v = (v*3)&0xFF.
+-float ptq1_0_trit(uint ib, uint a_offset, uint e) {
+-    uint b;
+-    uint n;
++// Element order is not positional: a 16-byte chunk of qs where byte j carries elements
++// t*16+j, then an 8-byte chunk carrying 80 + t*8 + (j-16), then qh at four trits per
++// byte carrying 120 + t*2 + h. Trit t of a byte is base-3 digit t counted from the most
++// significant one: t_n(b) = (((b * 3^n) mod 256) * 3) >> 8.
++//
++// The decode is a table lookup, not the recurrence. ptq1_0_trits[b] (types.glsl, in
++// shared memory, filled by init_iq_shmem) holds all five trits of byte b as 2-bit
++// two's-complement fields, so one bitfieldExtract yields the signed value. The block is
++// read through block_ptq1_0_packed32 (seven 32-bit words: qs[0..23] are words 0..5,
++// word 6 is qh[0] | qh[1] << 8 | d << 16), so four or eight consecutive elements cost one
++// or two word loads instead of one byte load each.
++
++// Signed trit -1/0/1 at bit position s (= 2 * trit index) of byte b.
++float ptq1_0_lut(uint b, int s) {
++    return float(bitfieldExtract(int(ptq1_0_trits[b & 0xFFu]), s, 2));
++}
++
++// Where element e (0..127) of a block sits: word wi of block_ptq1_0_packed32, byte bo
++// of that word, trit position n. Elements e..e+3 with e a multiple of 4 share wi and n
++// and occupy bytes bo..bo+3 of the word, except in the qh tail (e >= 120), where they
++// are trits n and n+1 of bytes 0 and 1 of word 6.
++void ptq1_0_locate(uint e, out uint wi, out uint bo, out uint n) {
+     if (e < 80u) {
+-        b = uint(data_a[a_offset + ib].qs[e & 15u]);
+-        n = e >> 4u;
++        wi = (e & 15u) >> 2u;
++        bo = e & 3u;
++        n  = e >> 4u;
+     } else if (e < 120u) {
+         const uint t = e - 80u;
+-        b = uint(data_a[a_offset + ib].qs[16u + (t & 7u)]);
+-        n = t >> 3u;
++        wi = 4u + ((t & 7u) >> 2u);
++        bo = t & 3u;
++        n  = t >> 3u;
+     } else {
+         const uint t = e - 120u;
+-        b = uint(data_a[a_offset + ib].qh[t & 1u]);
+-        n = t >> 1u;
++        wi = 6u;
++        bo = 0u;
++        n  = t >> 1u;
+     }
++}
+ 
+-    uint v = b;
+-    for (uint i = 0u; i < n; ++i) {
+-        v = (v * 3u) & 0xFFu;
++// Elements e, e+1 for e even. Unscaled.
++vec2 ptq1_0_dequant2(uint ib, uint e) {
++    uint wi, bo, n;
++    ptq1_0_locate(e, wi, bo, n);
++    const uint w = data_a_packed32[ib].w[wi] >> (bo << 3u);
++    const int  s = int(n) << 1;
++    return vec2(ptq1_0_lut(w, s), ptq1_0_lut(w >> 8u, s));
++}
++
++// Elements e..e+3 for e a multiple of 4. Unscaled. Branch-free after the locate: the
++// tail case is a select on the shift and on which byte feeds elements 2 and 3.
++vec4 ptq1_0_dequant4(uint ib, uint e) {
++    uint wi, bo, n;
++    ptq1_0_locate(e, wi, bo, n);
++    const uint w = data_a_packed32[ib].w[wi];
++    const int  s = int(n) << 1;
++    const bool tail = e >= 120u;
++    const int  s2 = tail ? s + 2 : s;
++    const uint b2 = tail ? w : w >> 16u;
++    const uint b3 = tail ? w >> 8u : w >> 24u;
++    return vec4(ptq1_0_lut(w, s), ptq1_0_lut(w >> 8u, s), ptq1_0_lut(b2, s2), ptq1_0_lut(b3, s2));
++}
++
++// Elements e..e+7 for e a multiple of 8. Unscaled. Below the tail the eight elements are
++// two adjacent words at one trit position; the tail is trits 0..3 of the two qh bytes.
++void ptq1_0_dequant8(uint ib, uint e, out vec4 lo, out vec4 hi) {
++    if (e < 120u) {
++        uint wi, bo, n;
++        ptq1_0_locate(e, wi, bo, n);
++        const uint w0 = data_a_packed32[ib].w[wi];
++        const uint w1 = data_a_packed32[ib].w[wi + 1u];
++        const int  s  = int(n) << 1;
++        lo = vec4(ptq1_0_lut(w0, s), ptq1_0_lut(w0 >> 8u, s), ptq1_0_lut(w0 >> 16u, s), ptq1_0_lut(w0 >> 24u, s));
++        hi = vec4(ptq1_0_lut(w1, s), ptq1_0_lut(w1 >> 8u, s), ptq1_0_lut(w1 >> 16u, s), ptq1_0_lut(w1 >> 24u, s));
++    } else {
++        const uint w = data_a_packed32[ib].w[6];
++        lo = vec4(ptq1_0_lut(w, 0), ptq1_0_lut(w >> 8u, 0), ptq1_0_lut(w, 2), ptq1_0_lut(w >> 8u, 2));
++        hi = vec4(ptq1_0_lut(w, 4), ptq1_0_lut(w >> 8u, 4), ptq1_0_lut(w, 6), ptq1_0_lut(w >> 8u, 6));
+     }
+-    return float(int((v * 3u) >> 8u) - 1);
+ }
+ 
+ #endif // PTQ1_0_GLSL
+diff --git a/ggml/src/ggml-vulkan/vulkan-shaders/types.glsl b/ggml/src/ggml-vulkan/vulkan-shaders/types.glsl
+index 469aad5..e5513c4 100644
+--- a/ggml/src/ggml-vulkan/vulkan-shaders/types.glsl
++++ b/ggml/src/ggml-vulkan/vulkan-shaders/types.glsl
+@@ -225,11 +225,57 @@ struct block_ptq1_0
+     float16_t d;
+ };
+ 
++// The same 28 bytes as seven words, for the decode in ptq1_0.glsl: qs[0..23] are
++// w[0..5], w[6] is qh[0] | qh[1] << 8 | d << 16. The scale is still read through
++// block_ptq1_0.d.
++struct block_ptq1_0_packed32
++{
++    uint32_t w[7];
++};
++
+ #if defined(DATA_A_PTQ1_0)
+ #define QUANT_K QUANT_K_PTQ1_0
+ #define QUANT_R QUANT_R_PTQ1_0
+ #define QUANT_AUXF 1
+ #define A_TYPE block_ptq1_0
++#define A_TYPE_PACKED32 block_ptq1_0_packed32
++
++// Byte -> five trits, generated from the CPU codec (ggml-quants.c, dequantize_row_ptq1_0:
++// q = (uint8_t)(b * 3^n), trit = (q * 3) >> 8). Entry b holds trit n at bits 2n..2n+1 as
++// (trit - 1) & 3, i.e. two's-complement -1/0/1, so bitfieldExtract(int(entry), 2n, 2) is
++// the signed value directly. Copied to shared memory once per workgroup, like the IQ grids.
++const uint ptq1_0_trits_const[256] = {
++    0x3ffu, 0x3ffu, 0x0ffu, 0x1ffu, 0x33fu, 0x03fu, 0x13fu, 0x37fu, 0x07fu, 0x17fu, 0x3cfu, 0x0cfu, 0x1cfu, 0x30fu, 0x00fu, 0x10fu,
++    0x34fu, 0x04fu, 0x14fu, 0x3dfu, 0x3dfu, 0x0dfu, 0x1dfu, 0x31fu, 0x01fu, 0x11fu, 0x35fu, 0x05fu, 0x15fu, 0x3f3u, 0x0f3u, 0x1f3u,
++    0x333u, 0x033u, 0x133u, 0x373u, 0x073u, 0x173u, 0x3c3u, 0x0c3u, 0x0c3u, 0x1c3u, 0x303u, 0x003u, 0x103u, 0x343u, 0x043u, 0x143u,
++    0x3d3u, 0x0d3u, 0x1d3u, 0x313u, 0x013u, 0x113u, 0x353u, 0x053u, 0x153u, 0x3f7u, 0x0f7u, 0x1f7u, 0x1f7u, 0x337u, 0x037u, 0x137u,
++    0x377u, 0x077u, 0x177u, 0x3c7u, 0x0c7u, 0x1c7u, 0x307u, 0x007u, 0x107u, 0x347u, 0x047u, 0x147u, 0x3d7u, 0x0d7u, 0x1d7u, 0x1d7u,
++    0x317u, 0x017u, 0x117u, 0x357u, 0x057u, 0x157u, 0x3fcu, 0x0fcu, 0x1fcu, 0x33cu, 0x03cu, 0x13cu, 0x37cu, 0x07cu, 0x17cu, 0x3ccu,
++    0x0ccu, 0x1ccu, 0x30cu, 0x30cu, 0x00cu, 0x10cu, 0x34cu, 0x04cu, 0x14cu, 0x3dcu, 0x0dcu, 0x1dcu, 0x31cu, 0x01cu, 0x11cu, 0x35cu,
++    0x05cu, 0x15cu, 0x3f0u, 0x0f0u, 0x1f0u, 0x330u, 0x030u, 0x030u, 0x130u, 0x370u, 0x070u, 0x170u, 0x3c0u, 0x0c0u, 0x1c0u, 0x300u,
++    0x000u, 0x100u, 0x340u, 0x040u, 0x140u, 0x3d0u, 0x0d0u, 0x1d0u, 0x310u, 0x010u, 0x010u, 0x110u, 0x350u, 0x050u, 0x150u, 0x3f4u,
++    0x0f4u, 0x1f4u, 0x334u, 0x034u, 0x134u, 0x374u, 0x074u, 0x174u, 0x3c4u, 0x0c4u, 0x1c4u, 0x304u, 0x004u, 0x104u, 0x104u, 0x344u,
++    0x044u, 0x144u, 0x3d4u, 0x0d4u, 0x1d4u, 0x314u, 0x014u, 0x114u, 0x354u, 0x054u, 0x154u, 0x3fdu, 0x0fdu, 0x1fdu, 0x33du, 0x03du,
++    0x13du, 0x37du, 0x37du, 0x07du, 0x17du, 0x3cdu, 0x0cdu, 0x1cdu, 0x30du, 0x00du, 0x10du, 0x34du, 0x04du, 0x14du, 0x3ddu, 0x0ddu,
++    0x1ddu, 0x31du, 0x01du, 0x11du, 0x35du, 0x35du, 0x05du, 0x15du, 0x3f1u, 0x0f1u, 0x1f1u, 0x331u, 0x031u, 0x131u, 0x371u, 0x071u,
++    0x171u, 0x3c1u, 0x0c1u, 0x1c1u, 0x301u, 0x001u, 0x101u, 0x341u, 0x041u, 0x041u, 0x141u, 0x3d1u, 0x0d1u, 0x1d1u, 0x311u, 0x011u,
++    0x111u, 0x351u, 0x051u, 0x151u, 0x3f5u, 0x0f5u, 0x1f5u, 0x335u, 0x035u, 0x135u, 0x375u, 0x075u, 0x175u, 0x175u, 0x3c5u, 0x0c5u,
++    0x1c5u, 0x305u, 0x005u, 0x105u, 0x345u, 0x045u, 0x145u, 0x3d5u, 0x0d5u, 0x1d5u, 0x315u, 0x015u, 0x115u, 0x355u, 0x055u, 0x155u
++};
++
++shared uint ptq1_0_trits[256];
++
++#define NEEDS_INIT_IQ_SHMEM
++void init_iq_shmem(uvec3 wgsize)
++{
++    // copy the table into shared memory and sync
++    [[unroll]] for (uint i = 0; i < ptq1_0_trits.length(); i += wgsize.x) {
++        if (ptq1_0_trits_const.length() % wgsize.x == 0 || i + gl_LocalInvocationIndex.x < ptq1_0_trits_const.length()) {
++            ptq1_0_trits[i + gl_LocalInvocationIndex.x] = ptq1_0_trits_const[i + gl_LocalInvocationIndex.x];
++        }
++    }
++    barrier();
++}
+ #endif
+ 
+ #define QUANT_K_Q2_0 64
+-- 
+2.47.3
+

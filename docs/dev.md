@@ -22,6 +22,12 @@ Architecture (`qwen35`): 64 blocks, every 4th is full attention (16 layers, 4 KV
 - **`CMAKE_CUDA_ARCHITECTURES`** comes from `nvidia-smi` (`89` for Ada). Compiling for one architecture is much faster than for the default set.
 - **ccache** speeds up rebuilds and is used when present; the build works without it.
 - OpenSSL is not needed: it only enables HTTPS model downloads inside llama-server, and `bonsai-server` passes a local path.
+- **Vulkan** (`BACKEND=vulkan`): `GGML_VULKAN=ON` and the patches from `patches/vulkan/` applied to
+  the clean checkout, nothing else. There is no architecture to pick; the shaders are compiled by
+  `glslc` at build time (`vulkan-shaders-gen`) and the driver specialises them. The Vulkan flash
+  attention takes mixed KV types as is, so `FA_ALL_QUANTS` has no counterpart. The patches are
+  applied after `git checkout --force`, so they always meet the pinned tree and `build` refuses
+  when the pin moved without them (`git apply --check`).
 
 ## Toolchain
 
@@ -38,9 +44,14 @@ Architecture (`qwen35`): 64 blocks, every 4th is full attention (16 layers, 4 KV
   that is harmless - `ldd llama-server` resolves `libcuda.so.1` to `/usr/lib/wsl/lib`, which
   comes first in the loader path. Next to a native driver of another version it can cause a
   driver/library version mismatch.
-- **Other GPUs:** the fork also carries `PTQ1_0` kernels for Vulkan, ROCm/HIP, Metal and the
-  CPU. This setup builds CUDA only, and [Other GPU backends](#other-gpu-backends) says what
-  Vulkan actually delivers.
+- **AMD through Vulkan** (`BACKEND=vulkan`): `deps` is tested on Debian 13 - `glslc`,
+  `libvulkan-dev`, `mesa-vulkan-drivers`, `vulkan-tools`; the package names are the same on
+  Ubuntu. It gates on a `/dev/dri/renderD*` node and on `vulkaninfo` seeing a device, which
+  needs the user in the `render` group. **Mesa >= 25.2** is what the numbers were measured
+  with; Debian 13 ships 25.0.7, which is 1.22x slower because `RADV_PERFTEST=nogttspill` is
+  ignored there, and `deps` warns about it. `trixie-backports` has 26.x. The fork also carries
+  ROCm/HIP and Metal kernels; untested. [Other GPU backends](#other-gpu-backends) has what
+  Vulkan delivers and why.
 
 Disk, measured: model 5.6 GB, `llama.cpp` checkout and build 1.9 GB, ccache ~0.25 GB, apt's
 CUDA toolkit with its dependencies ~5.4 GB. The binary links `libcudart` and `libcublas`
@@ -143,12 +154,23 @@ Three things moved it, measured one at a time at 16k:
 - **The context window costs nothing.** 48k and 16k give 633.06 and 632.96 ms/token before,
   142.98 and 142.56 after.
 
-**So: NVIDIA stays a requirement**, and the backend is not a `config.env` setting: 7 tok/s is
-a fifth of the 4060 Ti, and a 4k-token agent prompt costs ~75 s before the first token. It is
-enough for small things on a card that has nothing else, which is what T-016 asked. If you try
-it, use Mesa >= 25.2 with `RADV_PERFTEST=nogttspill` and the fork with the T-016 patch applied
-(`runs/T-016-ptq1_0-vulkan-decode/0001-*.patch`); the pinned `LLAMA_COMMIT` does not carry it
-until upstream takes it against #185.
+**So: CUDA for interactive use, Vulkan for batch.** 7 tok/s is a fifth of the 4060 Ti and
+54 tok/s prompt an eighth: a 4k-token agent prompt costs ~75 s before the first token, a
+10k-token localagent step ~25 minutes. That is fine for a task handed over and left alone
+(`bonsai-pi -p`, the localagent workflow) and not for a conversation, which is why `vulkan` is
+supported and not the default. How the setup does it, all of it measured above:
+
+- `BACKEND=vulkan` builds the fork with `GGML_VULKAN=ON` and `patches/vulkan/` applied; the
+  pinned `LLAMA_COMMIT` does not carry the decode until upstream takes it (T-017). Same
+  binary flags otherwise, same KV types, same `-fa on`.
+- `bonsai-server` exports `RADV_PERFTEST=nogttspill` (1.22x; needs Mesa >= 25.2, `deps` warns
+  below that). Nothing forces the clocks: with the new decode `mclk` ramps by itself, and the
+  knob needs root anyway.
+- The `dedicated` profile holds as is: 64k measured at 7 434 MiB of 8 192 on the RX 570,
+  141.56 ms/token (`runs/T-016-ptq1_0-vulkan-decode/measure-new-64k.out`), so the window
+  costs nothing here either and the pi budget is the same arithmetic.
+- `token_embd` stays on the CPU (265 MiB in GTT) and there is no Vulkan `mul_mat_vecq`; both
+  are fork work, neither is a setting.
 
 Two side findings from the same runs, both harmless: `token_embd.weight` (ptq1_0) "cannot be used
 with preferred buffer type Vulkan_Host, using CPU instead", so 265 MiB stays CPU-mapped even at
@@ -458,3 +480,8 @@ the model: [T-013](../backlog/T-013-localagent-first-run.md).
 | Answer ends after exactly `MAX_TOKENS` | The output cap was hit. Raise `MAX_TOKENS` or lower `BUDGET`. |
 | `stopReason: length` well below `MAX_TOKENS`, near a compaction | pi's output clamp: `BUDGET` too large for `RESERVE_TOKENS - 4096`. See [Context budget](#context-budget). |
 | pi compacts every turn, most of the time goes into summarizing | `RESERVE_TOKENS`/`KEEP_RECENT_TOKENS` are unset or too large for `CTX`: `./install.sh pi`. See [Context budget](#context-budget). |
+| Vulkan: ~1.2x below the numbers here, GTT above 400 MiB at 16k | Mesa < 25.2: `RADV_PERFTEST=nogttspill` is ignored. `deps` warns; take `mesa-vulkan-drivers` from backports. See [Other GPU backends](#other-gpu-backends). |
+| Vulkan: VRAM reads a few MiB right after load | Normal. RADV moves the weights into VRAM on the first request. Judge by tok/s, and read VRAM and GTT together. |
+| Vulkan: ~2x slower, VRAM ~20 MiB, GTT ~6 GB | `GGML_VK_PREFER_HOST_MEMORY` is set. It is checked for presence, so `=0` also turns it on: unset it. |
+| `vulkaninfo` lists no device, `deps` dies on it | Your user is not in the `render` group: `usermod -aG render $USER`, log in again. |
+| `patch does not apply` from `build` | `LLAMA_COMMIT` moved and `patches/$BACKEND/` was not rebased. Rebase it, or check whether the pin already carries the change and delete the patch. |
