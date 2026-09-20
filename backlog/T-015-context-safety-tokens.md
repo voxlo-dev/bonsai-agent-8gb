@@ -4,7 +4,7 @@
 - **Category:** decision
 - **Importance:** low
 - **Effort:** S
-- **Depends on:** T-014
+- **Depends on:** none
 
 ## Why
 
@@ -28,4 +28,6 @@ Three options, and the decision is which one this repo takes:
 - **Ask upstream** to make it configurable, e.g. a `compaction.safetyTokens` setting. Slow,
   but it is the only route that survives a pi update.
 
-Decide after T-014: if the run shows the trigger is not the limiting factor, leave it.
+T-014 settled the input: in the 64k run the closest step left 5 372 tokens of margin against
+the clamp, so the trigger was never the limiting factor. Leaving it is now the default
+answer; this ticket exists to record that, or to revisit if a future profile runs tighter.

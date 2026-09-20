@@ -78,6 +78,11 @@ On coding tasks the model drafts entire implementations inside its thinking bloc
 | `medium`, no budget | 12k tokens, hit the cap | none |
 | `medium`, budget 3k | ~2.7k tokens | plan + code |
 
+Budget size shows up in the result, not just in the token count. At 4096 the model produced
+a single-file game and claimed test runs it never performed; at 8192, with the same prompt
+and the 64k window, it built a server-authoritative game with two integration tests that
+work. See the table under [Context budget](#context-budget).
+
 The effort level barely matters. The hard budget is what works: `--reasoning-budget` cuts thinking after N tokens, and `--reasoning-budget-message` is injected before the end-of-thinking tag to push the model into acting. Each agent turn gets a fresh budget.
 
 Do not enable pi's thinking levels for this model (`"reasoning": true` in `models.json`). pi would send levels such as `high` or `minimal`, which the template rejects with an exception. The server sets the level.
@@ -149,7 +154,23 @@ without thinking) it stays under 7 904, and a 3k budget already produced plan + 
 [Reasoning](#reasoning)). The other lever, `RESERVE_TOKENS` 16000, would keep 8 192 of
 thinking but lower the trigger to 32 000 and the working room between compactions to ~16k.
 
-Re-run on the same prompt with `BUDGET` 4096 (session `2026-09-19T19-16-01`): 168 steps in
+Three runs of the same prompt, which is what the numbers below come from:
+
+| | 48k, `BUDGET` 8192 | 48k, `BUDGET` 4096 | **64k, `BUDGET` 8192** |
+| --- | --- | --- | --- |
+| Steps / duration | 79 / 89 min | 168 / 112 min | 108 / 91 min |
+| Ended | cut off on `length` | on its own | on its own |
+| Compactions | 5, every 5-19 steps | 7, every 8-33 steps | 4, every 17-30 steps |
+| Context after one | 15-19k | 15-19k | 21-24k |
+| Steps at the budget | 4 | 6 | 2 |
+| Result | unfinished | one `index.html`, online mode never tested, test passes claimed but not run | server + client + two integration tests, 869 lines, confirmed working |
+
+The middle run is the `display` profile, the right one is `dedicated`. Fewer, larger steps
+beat many small ones here: half the steps of the 4096 run, in the same time, for a result
+that holds up. The 64k run's closest approach to pi's clamp left 5 372 tokens of margin, so
+the trigger was never the limit.
+
+The 4096 re-run (session `2026-09-19T19-16-01`): 168 steps in
 112 minutes, and the run ended on its own (`stopReason: stop`) with no step cut off on
 `length`. 7 compactions, 8-33 steps apart, back at 14.5-19.4k each time. 6 steps hit the
 budget. The largest output was 11 441 tokens, 4k thinking plus a ~7k `write`, at 7.6k
