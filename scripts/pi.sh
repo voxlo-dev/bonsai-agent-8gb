@@ -2,7 +2,7 @@
 # Installs the pinned pi into PI_PREFIX and writes its config into PI_AGENT_DIR: provider "local"
 # as the default model, the compaction budget, AGENTS.md, the localagent extension with its workflow.
 # A global pi and ~/.pi stay untouched.
-# Re-run after changing CTX, PORT, MAX_TOKENS, RESERVE_TOKENS or KEEP_RECENT_TOKENS.
+# Re-run after changing CTX, SERVER_HOST, PORT, MAX_TOKENS, RESERVE_TOKENS or KEEP_RECENT_TOKENS.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 has npm || die "npm not found - install Node.js >= 22.19 first"
@@ -23,7 +23,7 @@ dir="$PI_AGENT_DIR"
 mkdir -p "$dir"
 log "writing pi config in $dir"
 
-DIR="$dir" PORT="$PORT" ALIAS="$MODEL_ALIAS" CTX="$CTX" MAX_TOKENS="$MAX_TOKENS" \
+DIR="$dir" SERVER_URL="$SERVER_URL" ALIAS="$MODEL_ALIAS" CTX="$CTX" MAX_TOKENS="$MAX_TOKENS" \
 RESERVE_TOKENS="$RESERVE_TOKENS" KEEP_RECENT_TOKENS="$KEEP_RECENT_TOKENS" python3 - <<'PY'
 import json, os
 d = os.environ["DIR"]
@@ -42,7 +42,7 @@ def save(name, data):
 models = load("models.json")
 models.setdefault("providers", {})["local"] = {
     "api": "openai-completions",
-    "baseUrl": f"http://127.0.0.1:{os.environ['PORT']}/v1",
+    "baseUrl": os.environ["SERVER_URL"] + "/v1",
     "apiKey": "none",
     "models": [{
         "id": os.environ["ALIAS"],

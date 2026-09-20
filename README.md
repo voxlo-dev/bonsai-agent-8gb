@@ -97,11 +97,13 @@ bonsai-server --port 9000
 | `RESERVE_TOKENS` | `16000` (profile) | window pi holds back for the answer; it compacts above `CTX - RESERVE_TOKENS` |
 | `KEEP_RECENT_TOKENS` | `12000` (profile) | recent history a compaction keeps |
 | `PORT` | `8080` | server port |
+| `LISTEN_HOST` | `127.0.0.1` | address the server binds to; `0.0.0.0` to serve other machines — there is no authentication |
+| `SERVER_HOST` | `127.0.0.1` | address `bonsai-pi` and pi connect to; set it to run the server on [another machine](docs/dev.md#a-server-on-another-machine) |
 | `PI_VERSION` | `0.85.1` | pi version the context budget was measured with |
 | `SERVER_AUTOSTART` | `true` | let `bonsai-pi` start and stop the server |
 | `SERVER_START_TIMEOUT` | `300` | seconds `bonsai-pi` waits for the model to load |
 
-After changing the profile, `CTX`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, run `./install.sh pi` again so pi's config matches the server.
+After changing the profile, `CTX`, `SERVER_HOST`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, run `./install.sh pi` again so pi's config matches the server.
 
 The last three carry each other: pi's own defaults assume a 200k window and make it compact on every single turn at this size. [Context budget](docs/dev.md#context-budget) has the measurements and the constraints between them.
 

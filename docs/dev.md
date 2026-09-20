@@ -396,6 +396,33 @@ dies during start. With the real model:
   logs `cancel task`), the server keeps running and answers the other session.
 - `run/` holds no session and no `server.pid` after each run.
 
+### A server on another machine
+
+`LISTEN_HOST` is what llama-server binds to, `SERVER_HOST` what the client side - `bonsai-pi`'s
+health and model checks, and the `baseUrl` written into pi's `models.json` - connects to. Both
+default to `127.0.0.1`, which is the whole setup on one machine. They were the same hardcoded
+literal until it turned out that the machine with the GPU and the machine you work on need not
+be the same one.
+
+To serve one GPU box to another host: `LISTEN_HOST=0.0.0.0 bonsai-server` there, then
+`SERVER_HOST=<box> ./install.sh pi` here and `bonsai-pi` as usual. `./install.sh pi` has to run
+again because pi keeps a written copy of the URL - the same drift as `CTX` and `PORT`.
+
+- **Autostart steps aside.** `bonsai-pi` starts and stops a server by pid and reads `SERVER_LOG`;
+  neither exists for someone else's process on another host. With a non-local `SERVER_HOST` it
+  therefore never starts one, says so once, and fails on the `/v1/models` check if nothing is
+  serving. `SERVER_AUTOSTART` keeps its meaning for a local server.
+- **There is no authentication.** The provider sends `apiKey: "none"` and llama-server asks for
+  nothing, so `LISTEN_HOST=0.0.0.0` offers the model to everyone who can reach the port. On a
+  network that is not yours, forward it instead - `ssh -N -L 8080:127.0.0.1:8080 <box>` - and
+  leave `SERVER_HOST` at `127.0.0.1`; the tunnel needs no setting at all.
+- **Latency is not the problem, bandwidth is not either.** A turn is one HTTP request and a
+  token stream; on a LAN the round trip disappears next to a 27B model's generation time.
+
+Verified: the URL that `config.env` derives for local, remote and remote-with-port, the
+`models.json` written from it, and the four autostart branches under `set -e`. Not yet run
+against a real remote server - the machine this was written on has no GPU.
+
 ## localagent workflow
 
 `pi/localagent-workflow/` is a multi-agent build (plan gate, per-unit spec/implement/review loop,
