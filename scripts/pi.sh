@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 # Installs the pinned pi into PI_PREFIX and writes its config into PI_AGENT_DIR: provider "local"
 # as the default model, the compaction budget, AGENTS.md, the localagent extension with its workflow.
 # A global pi and ~/.pi stay untouched.

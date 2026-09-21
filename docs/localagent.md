@@ -14,6 +14,24 @@ never for a one-line fix.
 This file is the workflow's home: the shape, the two measured runs, and why each piece is what it
 is. The window and compaction numbers it runs inside are in [`dev.md`](dev.md#context-budget).
 
+## Status
+
+**Experimental.** The core of this repo - `bonsai-server` and `bonsai-pi` - is not; this workflow
+is. Experimental here means two things: it may change without a deprecation note, and its numbers
+come from one machine and a handful of runs.
+
+| | |
+| --- | --- |
+| Known to work | one small feature, planned interactively with the user first, on the CUDA backend |
+| Not shown to work | large tasks, the reviewer's findings path (it has never fired), anything on the Vulkan backend at 7 tok/s |
+| Measured | two runs, T-013 and T-018, both below in [Economics](#economics) |
+| Open | [T-013](../backlog/T-013-localagent-first-run.md), [T-019](../backlog/T-019-workflow-cost.md) |
+
+Its ancestor was evaluated across eight local models before this repo existed, and no model of
+that generation produced a working artifact through it; one held the whole process. That series is
+[the model comparison](model-comparison.md), and it is the most honest description available of
+what a multi-agent workflow costs a local model.
+
 ## Shape
 
 | Phase | Step | Agent |
@@ -30,7 +48,9 @@ must be survivable from.
 
 ## Running it on pi
 
-The workflow was written for OpenCode. Its skill and the orchestrator prompt describe pi now: no
+The workflow is the author's own, written for OpenCode in the project thesis behind
+[the model comparison](model-comparison.md), where its seven agents were run against eight local
+models. Its skill and the orchestrator prompt describe pi now: no
 agent registration, `dispatch({ agent, brief })` as the only way to start an agent, template paths
 passed absolute. `codegraph`, which this setup does not have, is gone from the agent prompts; the
 agent frontmatter keeps the OpenCode dialect. `install.sh pi` copies the extension with the

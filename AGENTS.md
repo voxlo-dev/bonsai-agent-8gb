@@ -48,12 +48,14 @@ There is no test suite, and adding one was considered and declined (bash, no fra
 - pi's config: read back `$BONSAI_HOME/pi-agent/{models,settings}.json`
 - pi's behaviour: its session logs are JSONL at `$BONSAI_HOME/pi-agent/sessions/{cwd-slug}/` (sessions before the private instance: `~/.pi/agent/sessions/`), one entry per message, with `usage` token counts and `compaction` records — that is where a context problem is visible
 - `bash -n` on any script touched
+- The preflight gates: `scripts/preflight.sh` on a machine that fails them (no GPU, wrong `BACKEND`, too little disk) should stop with one screen of output and touch nothing
 
 ### Code style
 
 - POSIX-ish bash, `set -euo pipefail` via `lib.sh`; `bin/bonsai-server` sets it itself
 - A comment block at the top of every script saying what it does and what it needs
 - Settings are declared in `config.env` only (the window and budget values in `profiles/*.env`), never hard-coded in a consumer
+- `SPDX-License-Identifier: MIT` on the second line of every script (first, in a file with no shebang)
 
 ## Doc map
 
@@ -67,9 +69,11 @@ Docs are split by **lifespan**, and every fact has exactly one home:
 | --- | --- | --- |
 | `README.md` | — | user-facing entry point: install, use, configure |
 | `AGENTS.md` | — | this file: structure, code style, conventions |
+| `CONTRIBUTING.md` | — | the human-facing short form of this file: the measurement rule, what gets declined |
 | `docs/dev.md` | durable | why each non-default choice is what it is, with the measurement behind it; plus troubleshooting. Doubles as this project's decisions log |
 | `docs/localagent.md` | durable | the localagent workflow: its shape, how it runs on pi, and the measured runs behind it |
 | `docs/performance.md` | durable | what limits generation speed: the bandwidth roofline the numbers sit against, and the optimizations tried and rejected |
+| `docs/model-comparison.md` | durable | eight local models as coding agents on an 8 GB card, from the project thesis that predates this repo. Frozen: it is a translated record of a finished study, not a living page. New measurements go in `docs/dev.md` or a ticket |
 | `backlog/` | living | one file per ticket (`T-NNN-{slug}.md`), indexed in `backlog.md`, which carries the `Next ticket` counter |
 | `artefacts/{sprint}/` | ephemeral | workflow run artifacts, bound to their sprint, frozen at `close-sprint`. Absent until the first sprint opens |
 | `.temp/` | ephemeral | gitignored scratch root, safe to delete at any time |

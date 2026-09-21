@@ -79,6 +79,12 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
+		ctx.ui.notify(
+			"localagent is experimental: one small feature has run end to end, large tasks and the " +
+				"reviewer's findings path have not. See docs/localagent.md#status.",
+			"warning",
+		);
+
 		pi.registerTool({
 			name: "dispatch",
 			label: "Dispatch",

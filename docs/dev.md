@@ -507,6 +507,32 @@ workload, and loosening their triggers made it worse. Acceptance runs at 6-20 % 
 break-even is above 50 %. The full result, including why a synthetic benchmark showed a
 misleading 1.59x, is in [Performance](performance.md#speculative-decoding-tried-rejected).
 
+## Preflight
+
+`install.sh` runs [`scripts/preflight.sh`](../scripts/preflight.sh) before any step. It exists
+because the two expensive steps come first and fail last: a CUDA build is 10 to 30 minutes and the
+model is 5.6 GB, so a missing driver, a full disk or a 6 GB card used to be discovered after half
+an hour of work rather than before it.
+
+It checks the distro, free disk against what the named steps will actually write, `MemAvailable`,
+the driver for `BACKEND`, total and used VRAM, Node for the `pi` step, and whether something is
+already answering on `PORT`. Three properties matter:
+
+- **It reports every item and exits once.** A list of five problems takes one pass to fix; five
+  runs that each die on the next one take five.
+- **It checks only the steps being run.** `./install.sh model link` needs no GPU at all, which is
+  how a server on another machine gets set up, so the driver checks are skipped there.
+- **Warnings do not stop it.** Low RAM, an unmeasured distro, a busy port: these are things to
+  know, not things to block on. Only a missing driver, too little disk, a card below 8 GB or a
+  Node too old for pi are hard failures.
+
+`SKIP_PREFLIGHT=1` bypasses it. The failure message says so, because the checks encode what was
+true on two machines and should not be the thing that stops a third.
+
+VRAM in use above 400 MiB is a warning rather than a failure: it usually means a desktop is on the
+card, which is what `PROFILE=display` is for, but it can equally be another model server that will
+be gone by the time this one starts. See [VRAM budget](#vram-budget).
+
 ## Troubleshooting
 
 | Symptom | Cause · fix |
@@ -527,4 +553,7 @@ misleading 1.59x, is in [Performance](performance.md#speculative-decoding-tried-
 | Vulkan: VRAM reads a few MiB right after load | Normal. RADV moves the weights into VRAM on the first request. Judge by tok/s, and read VRAM and GTT together. |
 | Vulkan: ~2x slower, VRAM ~20 MiB, GTT ~6 GB | `GGML_VK_PREFER_HOST_MEMORY` is set. It is checked for presence, so `=0` also turns it on: unset it. |
 | `vulkaninfo` lists no device, `deps` dies on it | Your user is not in the `render` group: `usermod -aG render $USER`, log in again. |
+| `preflight: N problem(s)` | Each line above it says what and how. `SKIP_PREFLIGHT=1 ./install.sh` goes ahead anyway. |
+| `preflight` warns that VRAM is already in use | A desktop or another server is on the card. `PROFILE=display`, or free it. See [VRAM budget](#vram-budget). |
+| `download failed` from `model` | Run `./install.sh model` again; `curl -C -` resumes from the `.part` file. |
 | `patch does not apply` from `build` | `LLAMA_COMMIT` moved and `patches/$BACKEND/` was not rebased. Rebase it, or check whether the pin already carries the change and delete the patch. |

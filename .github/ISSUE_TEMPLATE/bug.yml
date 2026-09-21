@@ -1,0 +1,81 @@
+name: Something does not work
+description: An install step, the server or pi fails
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Logs beat descriptions. `$BONSAI_HOME` is `~/.local/share/bonsai-local` unless you moved it.
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where it fails
+      options:
+        - install.sh deps
+        - install.sh build
+        - install.sh model
+        - install.sh pi
+        - install.sh link
+        - bonsai-server (starting or running)
+        - bonsai-pi (the agent session)
+        - bonsai-pi --localagent (the experimental workflow)
+        - something else
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options: [cuda, vulkan]
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and VRAM
+      placeholder: RTX 4060 Ti 8 GB
+    validations:
+      required: true
+  - type: input
+    id: driver
+    attributes:
+      label: Driver version
+      description: "CUDA: the `nvidia-smi` header. Vulkan: your Mesa version, `vulkaninfo | grep driverInfo`."
+      placeholder: Mesa 26.1.2 / driver 560.35
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Distro, and native or WSL2
+      placeholder: Ubuntu 26.04 under WSL2
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        The last 30 lines of the failing step. For a server problem that is `tail -30 ~/.local/share/bonsai-local/server.log`.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Non-default settings
+      description: "Any variable you set: PROFILE, CTX, PORT, SERVER_HOST, BUILD_JOBS, and so on. Say none if none."
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you file
+      options:
+        - label: I read the troubleshooting table in docs/dev.md and my case is not in it
+        - label: The GPU drives no display, or I am using PROFILE=display

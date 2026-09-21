@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # Shared helpers for the install steps.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

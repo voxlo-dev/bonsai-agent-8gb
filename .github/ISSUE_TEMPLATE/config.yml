@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Model questions (quality, benchmarks, the ternary format)
+    url: https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/discussions
+    about: This repo runs the model, it does not train it. Ask PrismML about the model itself.
+  - name: PTQ1_0 support in mainline llama.cpp
+    url: https://github.com/ggml-org/llama.cpp/pull/29077
+    about: Stock llama.cpp cannot load this model yet. That work is upstream, not here.

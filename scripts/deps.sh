@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 # Installs the build toolchain via apt for BACKEND (cuda or vulkan). Needs sudo, so run it from a
 # real terminal. CUDA is tested on Ubuntu 26.04, Vulkan on Debian 13; other systems bring the
 # toolchain themselves, see docs/dev.md#toolchain.

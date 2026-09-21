@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 # Builds llama-server from the pinned PrismML fork: static, CUDA or Vulkan (BACKEND), with the
 # patches from patches/$BACKEND applied. FORCE=1 rebuilds even when the pinned binary is there.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -18,8 +19,8 @@ if [[ -z "${FORCE:-}" && -x "$LLAMA_SERVER" && "$(cat "$stamp" 2>/dev/null)" == 
 fi
 
 case "$BACKEND" in
-  cuda)   has nvcc  || die "nvcc not found - run ./install.sh deps" ;;
-  vulkan) has glslc || die "glslc not found - run ./install.sh deps" ;;
+  cuda)   has nvcc  || die "nvcc not found - run ./install.sh deps, or install CUDA >= 12.4 yourself (docs/dev.md#toolchain)" ;;
+  vulkan) has glslc || die "glslc not found - run ./install.sh deps, or install the Vulkan SDK yourself (docs/dev.md#toolchain)" ;;
 esac
 
 log "fetching fork at ${LLAMA_COMMIT:0:7}"
@@ -88,7 +89,11 @@ if [[ -z "$jobs" ]]; then
   (( jobs < cores )) && warn "only ${avail_mb} MB free - building with -j$jobs instead of -j$cores"
 fi
 
-log "building llama-server with -j$jobs (takes a while)"
+case "$BACKEND" in
+  cuda)   est="10-30 minutes, and nvcc is quiet for long stretches" ;;
+  vulkan) est="the shaders alone are ~4 minutes; the whole build 10-20" ;;
+esac
+log "building llama-server with -j$jobs ($est)"
 nice -n "${NICE:-10}" cmake --build build --target llama-server -j "$jobs"
 
 echo "$want" > "$stamp"

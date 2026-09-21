@@ -1,0 +1,77 @@
+name: Hardware report
+description: You ran it on a card that is not in the README table
+labels: [hardware-report]
+title: "Hardware report: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two cards have been measured. Everything else in the README is a guess, and a report
+        turns one of those guesses into a row. It is the most useful thing you can send.
+
+        A report is welcome even when it failed. "Does not fit at 64k" is a result.
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and VRAM
+      placeholder: RX 6600 XT 8 GB
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options: [cuda, vulkan]
+    validations:
+      required: true
+  - type: input
+    id: driver
+    attributes:
+      label: Driver version
+      placeholder: Mesa 25.3 / driver 560.35
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Distro, and native or WSL2
+    validations:
+      required: true
+  - type: input
+    id: ctx
+    attributes:
+      label: Profile and context window
+      placeholder: dedicated, CTX=64000
+    validations:
+      required: true
+  - type: dropdown
+    id: fits
+    attributes:
+      label: Did it fit?
+      options:
+        - "Yes, all layers on the GPU"
+        - "No, layers went to the CPU"
+        - "No, the server did not start"
+    validations:
+      required: true
+  - type: input
+    id: vram
+    attributes:
+      label: VRAM in use once loaded
+      description: "`nvidia-smi`, or for RADV read it after the first request, not at load."
+      placeholder: 7747 MiB of 8188
+  - type: textarea
+    id: speed
+    attributes:
+      label: Speed
+      description: |
+        Generation tok/s at a short context, and prompt processing tok/s if you have it. Say how
+        you measured: llama-server's own timings line, a `-p` run, or something else.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Environment variables you needed, driver quirks, what you had to change to make it work.

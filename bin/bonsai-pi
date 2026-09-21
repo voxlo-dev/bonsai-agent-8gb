@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 # Starts the pinned pi with its own config in PI_AGENT_DIR, set up for bonsai-server.
 # A global pi and ~/.pi are not used. Arguments go straight to pi.
 # With SERVER_AUTOSTART, starts bonsai-server in the background when none is running and stops it
@@ -10,6 +11,20 @@ source "$ROOT/config.env"
 
 say() { printf '\033[1;36m==>\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+
+# A server that fails to start says why in its log, and nobody reads a log they are only pointed
+# at. The usual causes are in docs/dev.md#troubleshooting: VRAM held by something else, a stale
+# process on PORT, a model file that is not there.
+die_with_log() {
+  printf '\033[1;31mxx\033[0m %s\n' "$1" >&2
+  if [[ -s "$SERVER_LOG" ]]; then
+    printf '\n--- last 20 lines of %s ---\n' "$SERVER_LOG" >&2
+    tail -20 "$SERVER_LOG" >&2
+    printf -- '--- end ---\n\n' >&2
+  fi
+  printf 'Troubleshooting: docs/dev.md#troubleshooting\n' >&2
+  exit 1
+}
 
 [[ -x "$PI_BIN" ]] || die "pi not found at $PI_BIN - run ./install.sh pi"
 
@@ -82,10 +97,12 @@ if [[ "$autostart" == "true" ]]; then
     say "waiting for the model to load"
     for ((i = 0; i < SERVER_START_TIMEOUT; i++)); do
       healthy && { say "server ready after ${i}s, starting pi"; break; }
-      alive "$pid" || die "bonsai-server exited during start - see $SERVER_LOG"
+      alive "$pid" || die_with_log "bonsai-server exited during start"
+      # The model takes a while; say so once instead of leaving a silent terminal.
+      ((i == 30)) && say "still loading (${CTX} token window on $BACKEND); the timeout is ${SERVER_START_TIMEOUT}s"
       sleep 1
     done
-    healthy || die "bonsai-server not ready after ${SERVER_START_TIMEOUT}s - see $SERVER_LOG"
+    healthy || die_with_log "bonsai-server not ready after ${SERVER_START_TIMEOUT}s - raise SERVER_START_TIMEOUT if the model is on a slow disk"
   fi
 fi
 

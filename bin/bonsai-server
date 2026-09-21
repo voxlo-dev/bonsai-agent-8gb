@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 # Starts Ternary-Bonsai-2-27B on the PrismML llama.cpp fork with the settings from config.env.
 # Extra arguments go straight to llama-server and override the defaults. Rationale: docs/dev.md.
 set -euo pipefail
