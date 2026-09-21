@@ -1,29 +1,135 @@
 # Bonsai Agent for 8 GB VRAM
 
-**A 27B coding agent that runs entirely on an 8 GB consumer GPU.**
+**A 27B coding agent, running entirely on your own 8 GB graphics card.**
 
-Runs [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) fully on an 8 GB GPU - NVIDIA through CUDA at 36 tok/s, or AMD through Vulkan at 7 tok/s for batch use - serves it with llama.cpp, and wires it into the [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) coding agent.
+Not a 7B that writes plausible-looking code. A dense 27 billion parameter model with a 64,000 token
+context window, fully resident in the VRAM of a card you already own, driving a real coding agent
+that reads your files, runs your tests and edits your repo. No API key, no rate limit, nothing
+leaving the machine.
 
-Stock llama.cpp cannot load this model: its `PTQ1_0` ternary quant needs the [PrismML llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp). This repo builds that fork, fetches the model, starts a tuned server and configures pi.
+Two cards were measured, and they are deliberately the two ends of what "8 GB" means:
 
-## Why this is interesting
+| | | |
+| --- | --- | --- |
+| **AMD RX 570 8 GB** | **7 tok/s** | a ten-year-old card that sells used for the price of a video game. The cheapest hardware this is known to run on at all |
+| **RTX 4060 Ti 8 GB** | **36 tok/s** | an ordinary current midrange card, which is roughly where a typical gaming PC sits today |
 
-Dense 27B models write the best code of anything that runs locally, and on an 8 GB card they run
-at about 4 tok/s because the weights do not fit in VRAM. Mixture-of-experts models at that size
-are fast and less reliable as agents. That trade-off was measured across eight local models on an
-RTX 4060 8 GB one week before this repo existed: the best result took six hours, and the fastest
-model that held an agent process left a broken artifact. The numbers are in
+Everything in between should land in between. 8 GB is not an exotic amount of VRAM, it is close to
+the middle of what people actually have.
+
+At 36 tok/s you hold a conversation with it. At 7 tok/s you hand it a task and come back later,
+which is a real way to use an agent and the reason the AMD number is in the headline at all.
+
+## What you get
+
+- **[Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf)** in its
+  `PTQ1_0` ternary quant, 5.95 GB of weights, served by llama.cpp with all 65 layers on the GPU.
+  Stock llama.cpp cannot load this file; this repo builds the
+  [PrismML fork](https://github.com/PrismML-Eng/llama.cpp) at a pinned commit that can.
+- **A 64k context window** on 8 GB, with a KV cache quantised to `q8_0`/`q4_0` and a VRAM budget
+  tuned to the last few hundred megabytes. That is enough for an agent to hold a real task.
+- **The [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) coding agent,
+  configured for this model**, not just pointed at it: its own private instance, a context budget
+  that keeps it from compacting every single turn, a thinking budget that fits under its output
+  cap, and an `AGENTS.md` written for a model this size. Your own pi keeps its settings.
+- **An experimental multi-agent workflow** for work too large for one context, which hands each
+  step to a separate agent with its own small window.
+- **One command to install it**, and a preflight that tells you in ten seconds whether your machine
+  can run it, before anything downloads or compiles.
+
+## Why it is interesting
+
+Dense models in the 27B class write the best code of anything that runs locally, and on an 8 GB
+card they run at about 4 tok/s, because the weights do not fit and spill into system RAM.
+Mixture-of-experts models of that size are fast and noticeably less reliable as agents. That
+trade-off was measured across eight local models on an RTX 4060 8 GB one week before this repo
+existed: the best result took six hours, and the fastest model that actually held an agent process
+left a broken artifact behind. The numbers are in
 [the model comparison](docs/model-comparison.md).
 
-Ternary Bonsai 2 27B is a dense 27B whose ternary quant is 5.95 GB, so it fits. This repo makes it
-usable: the fork, the pins, a server tuned to the last few hundred MiB of an 8 GB card, and a
-context budget that keeps an agent from compacting every turn.
+Ternary Bonsai 2 27B is a dense 27B whose weights compress to 5.95 GB, which is the combination
+that table has no row for. This repo exists to make it usable.
 
-**What is measured and what is not.** The speed numbers below are reproducible from this repo. The
+**What is measured and what is not.** The speed numbers here are reproducible from this repo. The
 claim that Bonsai closes the quality gap is **not measured yet**: no Bonsai run exists in the
-comparison table, and the run that would put it there is [T-027](backlog/T-027-quality-evidence.md).
-Until then this repo claims interactive speed for a dense 27B on 8 GB, nothing about beating other
-models.
+comparison table, and the run that would put it there is
+[T-027](backlog/T-027-quality-evidence.md). Until then this repo claims interactive speed for a
+dense 27B on 8 GB, and nothing about beating other models.
+
+## Install
+
+You need a **GPU with 8 GB of VRAM that is not driving your monitor**, Linux or WSL2, and about
+14 GB of free disk. The full list is under [Requirements](#requirements), but you do not have to
+read it first: `install.sh` runs a preflight that checks your machine and stops with a list of
+what is missing before it spends any time.
+
+```bash
+git clone https://github.com/voxlo-dev/bonsai-agent-8gb.git
+cd bonsai-agent-8gb
+./install.sh                    # NVIDIA
+BACKEND=vulkan ./install.sh     # AMD
+```
+
+That is one apt toolchain, a 10 to 30 minute compile, a 5.6 GB download and a pi install. Every
+step is idempotent, so re-running it is safe and skips whatever is already done.
+
+`BACKEND` has to be set for every later `./install.sh build` too (or exported): `build` decides on it which toolchain to use and which patches from [`patches/`](patches/) to apply to the fork. `bonsai-server` reads it as well.
+
+The default runs every step in order. Name one or more steps to run just those:
+
+| Step | Does |
+| --- | --- |
+| `deps` | apt toolchain for `BACKEND`: build tools, cmake, then gcc-13 and the CUDA toolkit, or glslc and the Vulkan headers (asks for sudo, so run it in a real terminal) |
+| `build` | clones the fork at the pinned commit, applies `patches/$BACKEND/`, builds `llama-server` (`FORCE=1` rebuilds) |
+| `model` | links the GGUF from the Hugging Face cache, or downloads and checksums it |
+| `pi` | installs its own pinned pi and writes its config: provider `local` as default, the context budget, `AGENTS.md`. A pi you already have and `~/.pi` stay untouched |
+| `link` | puts `bonsai-server` and `bonsai-pi` into `~/.local/bin` |
+
+Everything lands in `~/.local/share/bonsai-local` (`BONSAI_HOME`), pi's config and sessions in `pi-agent/` there. `SKIP_PREFLIGHT=1` skips the checks if you know better than they do.
+
+### On Windows
+
+This runs under WSL2, and the reference machine for the CUDA numbers is exactly that. In
+PowerShell as administrator:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+Reboot if it asks, then open Ubuntu and work entirely inside it. Two things matter:
+
+- **The NVIDIA driver belongs on the Windows side only.** WSL2 passes the GPU through. Do not
+  install a Linux NVIDIA driver inside Ubuntu; it will break the passthrough. Check it works with
+  `nvidia-smi` inside Ubuntu before you install anything here.
+- **Keep the repo in the Linux filesystem**, under `~`, not in `/mnt/c/`. Building across the
+  Windows filesystem boundary is several times slower.
+
+```bash
+sudo apt update && sudo apt install -y git
+git clone https://github.com/voxlo-dev/bonsai-agent-8gb.git
+cd bonsai-agent-8gb && ./install.sh
+```
+
+AMD cards under WSL2 are untested. Use native Linux for the Vulkan backend.
+
+## Use
+
+```bash
+bonsai-pi            # in your project directory; arguments go to pi
+```
+
+`bonsai-pi` starts the server in the background when none is running, waits for the model to load, and stops the server again when the last `bonsai-pi` session ends. Its output goes to `~/.local/share/bonsai-local/server.log`. A server you started yourself is used and left running:
+
+```bash
+bonsai-server        # terminal 1, ready at "listening on http://127.0.0.1:8080"; Ctrl+C stops it
+bonsai-pi            # terminal 2
+```
+
+For a larger feature, `bonsai-pi --localagent` runs the [localagent workflow](docs/localagent.md) (**experimental**, see its [status](docs/localagent.md#status)): pi plans with you, then after you approve the plan hands every step to a separate agent with its own small context — per unit a spec, the implementation, and a review that writes the tests from the spec's acceptance criteria — then e2e and docs. Type the task after it starts, or pass it as `bonsai-pi --localagent -- "task"`. The `--` matters: without it pi reads the task as the flag's value.
+
+It has carried one small feature end to end on the CUDA backend. Large tasks, the reviewer's findings path and the Vulkan backend at 7 tok/s are not shown to work, and it may change without notice.
+
+`bonsai-pi` is a separate pi instance, so a pi you use with other models keeps its own settings. The server is also a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1`, model `bonsai-27b`.
 
 ## Requirements
 
@@ -63,48 +169,6 @@ decode speed), ROCm/HIP, Metal, and CPU-only. Vulkan is the one AMD path.
 - ~14 GB free disk: 5.6 GB model, 1.9 GB build, ~5.4 GB for the CUDA toolkit from apt. ~9 GB when a CUDA toolkit is already installed, or with Vulkan
 
 Without apt, install the toolchain yourself (CUDA and gcc, or glslc and the Vulkan SDK; plus cmake, git, python3) and skip `deps`: `./install.sh build model pi link`.
-
-## Install
-
-```bash
-git clone https://github.com/voxlo-dev/bonsai-agent-8gb.git
-cd bonsai-agent-8gb
-./install.sh                    # NVIDIA
-BACKEND=vulkan ./install.sh     # AMD
-```
-
-`BACKEND` has to be set for every later `./install.sh build` too (or exported): `build` decides on it which toolchain to use and which patches from [`patches/`](patches/) to apply to the fork. `bonsai-server` reads it as well.
-
-The default runs every step in order. Name one or more steps to run just those:
-
-| Step | Does |
-| --- | --- |
-| `deps` | apt toolchain for `BACKEND`: build tools, cmake, then gcc-13 and the CUDA toolkit, or glslc and the Vulkan headers (asks for sudo, so run it in a real terminal) |
-| `build` | clones the fork at the pinned commit, applies `patches/$BACKEND/`, builds `llama-server` (`FORCE=1` rebuilds) |
-| `model` | links the GGUF from the Hugging Face cache, or downloads and checksums it |
-| `pi` | installs its own pinned pi and writes its config: provider `local` as default, the context budget, `AGENTS.md`. A pi you already have and `~/.pi` stay untouched |
-| `link` | puts `bonsai-server` and `bonsai-pi` into `~/.local/bin` |
-
-Everything lands in `~/.local/share/bonsai-local` (`BONSAI_HOME`), pi's config and sessions in `pi-agent/` there.
-
-## Use
-
-```bash
-bonsai-pi            # in your project directory; arguments go to pi
-```
-
-`bonsai-pi` starts the server in the background when none is running, waits for the model to load, and stops the server again when the last `bonsai-pi` session ends. Its output goes to `~/.local/share/bonsai-local/server.log`. A server you started yourself is used and left running:
-
-```bash
-bonsai-server        # terminal 1, ready at "listening on http://127.0.0.1:8080"; Ctrl+C stops it
-bonsai-pi            # terminal 2
-```
-
-For a larger feature, `bonsai-pi --localagent` runs the [localagent workflow](docs/localagent.md) (**experimental**, see its [status](docs/localagent.md#status)): pi plans with you, then after you approve the plan hands every step to a separate agent with its own small context — per unit a spec, the implementation, and a review that writes the tests from the spec's acceptance criteria — then e2e and docs. Type the task after it starts, or pass it as `bonsai-pi --localagent -- "task"`. The `--` matters: without it pi reads the task as the flag's value.
-
-It has carried one small feature end to end on the CUDA backend. Large tasks, the reviewer's findings path and the Vulkan backend at 7 tok/s are not shown to work, and it may change without notice.
-
-`bonsai-pi` is a separate pi instance, so a pi you use with other models keeps its own settings. The server is also a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1`, model `bonsai-27b`.
 
 ## Configure
 
@@ -183,6 +247,18 @@ Five times slower than the 4060 Ti, and eight times on prompts: a 4k-token agent
 localagent workflow and left alone - and it is why `vulkan` is not the default. The fork's own
 Vulkan kernel did 0.94 tok/s on this card; [Other GPU backends](docs/dev.md#other-gpu-backends)
 has the way from there to 7.
+
+### The one change worth more than any flag
+
+**Do not let this GPU drive your monitor.** A Windows desktop on the same card takes 0.5 to 1.2 GB
+of VRAM and competes for GPU time, and both of those come straight out of the model. Moving the
+display to the motherboard's integrated GPU - enable the iGPU in the BIOS, plug the monitor into
+the mainboard, and set browsers to "Power saving" under Windows *Settings, System, Display,
+Graphics* - took generation from 21 to 34 tok/s in the same session on the reference machine.
+
+That is a bigger win than every tuning knob in this repo combined, and it costs nothing but a
+cable. If you cannot do it, use `PROFILE=display`, which drops the window to 48k to make room for
+the desktop.
 
 ## Docs
 
