@@ -61,35 +61,47 @@ but a criterion test does** — a wrong exit code on one error path, a message o
 of stderr — otherwise the run measures the self-verification, not the reviewer.
 
 `runs/T-019-reviewer-findings/run.sh` (runs/ is gitignored, so it lives here until it exists
-there). `bonsai-server` must be up. Fill the four variables from T-018's `STATE.md`:
+there). `bonsai-server` must be up. It copies T-018's product back to the moment before U2's
+review — U1's tests only, U2 `implemented`, no review result in the run log — plants the defect,
+and hands the reviewer T-018's own U2 brief with only the path changed. Afterwards it runs the
+reviewer's tests against the planted and the original code: red then green means the tests
+caught the defect; red on both means they are wrong.
 
 ```bash
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
-# Runs one localagent agent by hand, the way dispatch starts it, against a copy of a finished
-# unit with one planted defect. STEP=review (default): plant, then the reviewer. STEP=rework:
-# the implementer on the review it wrote. Needs bonsai-server running and the pinned pi.
+# T-019 step 1: the localagent reviewer, alone, against T-018's finished U2 with one planted
+# defect. Runs the agent the way dispatch starts it (pi -p, same flags, prompt appended), with
+# T-018's own U2 reviewer brief, only the path changed. Needs bonsai-server running.
+#
+#   ./run.sh                 plant, then the reviewer (~10 min)
+#   STEP=rework ./run.sh     the implementer on the review it wrote, then the reviewer's tests
+#
+# PLANT is the defect. The default sends the "unknown task id" error to stdout instead of
+# stderr: criterion 6 catches it, a quick manual run by the implementer would not.
 set -euo pipefail
-ROOT=${ROOT:-$HOME/bonsai-local}            # this repo
-SRC=${SRC:?the repo T-018 built, with localagent/ and the product}
-UNIT=${UNIT:-U2}
-TEST_CMD=${TEST_CMD:-python3 -m unittest -v}
-CONSTRAINTS=${CONSTRAINTS:-Python 3, standard library only, no new dependencies}
-PLANT=${PLANT:?shell command that breaks exactly one criterion in the copy, e.g. "sed -i ... todo.py"}
+here="$(dirname "$(readlink -f "$0")")"
+ROOT="$(cd "$here/../.." && pwd)"
+SRC=${SRC:-$ROOT/runs/T-018-workflow-without-tdd/work}
+UNIT=U2
+TEST_CMD="python3 -m unittest discover -v"
+PLANT=${PLANT:-"sed -i 's/print(f\"error: unknown task id {args.id}\", file=sys.stderr)/print(f\"error: unknown task id {args.id}\")/' todo.py"}
 STEP=${STEP:-review}
-WORK=${WORK:-$PWD/work}
-OUT=$PWD                                    # logs and sessions stay out of the copy
+WORK=$here/work
+OUT=$here
 source "$ROOT/config.env"
-curl -sf -o /dev/null "$SERVER_URL/health" || { echo "no server at $SERVER_URL" >&2; exit 1; }
+curl -sf -o /dev/null "http://$SERVER_HOST:$PORT/health" || { echo "no server on $SERVER_HOST:$PORT - start bonsai-server" >&2; exit 1; }
 
 agents="$ROOT/pi/localagent-workflow/agents"
 prompt() { awk 'n>=2{print} /^---$/{n++}' "$agents/localagent-$1.md"; }   # body without frontmatter
-run() {  # run <agent> <brief> — same flags as the extension's dispatch
-  local log="$OUT/$1.$(date +%H%M%S).jsonl"
+run() {  # run <agent> <brief> - same flags as the extension's dispatch
+  local log="$OUT/$1.$(date +%H%M%S).jsonl" t0=$SECONDS
+  echo "--- $1 started $(date +%T)"
   PI_CODING_AGENT_DIR="$PI_AGENT_DIR" "$PI_BIN" --mode json -p \
     --no-extensions --no-skills --no-prompt-templates --no-context-files \
     --session-dir "$OUT/sessions" --append-system-prompt "$(prompt "$1")" -- "$2" \
-    | tee "$log" >/dev/null
+    > "$log"
+  echo "--- $1 took $(( (SECONDS - t0) / 60 )):$(printf %02d $(( (SECONDS - t0) % 60 )))"
   python3 - "$log" <<'EOF'
 import json, re, sys
 final = None; turns = 0
@@ -107,22 +119,55 @@ EOF
 
 case "$STEP" in
   review)
-    rm -rf "$WORK"; cp -r "$SRC" "$WORK"; rm -rf "$WORK/.git" "$WORK/localagent/units/$UNIT/review.md"
-    (cd "$WORK" && eval "$PLANT" && git init -q && git add -A && git commit -qm "planted")
-    cd "$WORK"
-    run reviewer "Working directory: $WORK (absolute). Constraints: $CONSTRAINTS.
-Task: review unit $UNIT — write one test per acceptance criterion, run them, review the code.
-Inputs: $WORK/localagent/units/$UNIT/spec.md. Test command: $TEST_CMD"
-    echo "--- files the reviewer touched (production code here is a breach):"; git status --short
+    [ ! -e "$WORK" ] || { echo "$WORK exists - move or delete it first" >&2; exit 1; }
+    cp -r "$SRC" "$WORK"; cd "$WORK"
+    rm -rf .git __pycache__ todo.json "localagent/units/$UNIT/review.md"
+    # Back to the moment before T-018's U2 review: U1's tests only, U2 implemented, no review
+    # result in the run log.
+    python3 - <<'EOF'
+import re
+t = open("test_todo.py").read()
+start = t.index("@contextlib.contextmanager\ndef _chdir_temp")
+end = t.index('if __name__ == "__main__":')
+open("test_todo.py", "w").write(t[:start] + t[end:])
+s = open("localagent/STATE.md").read()
+s = s.replace("Phase: finalize ", "Phase: build    ")
+s = re.sub(r"\| U2 \| CLI \| U1 \| done \|", "| U2 | CLI | U1 | implemented |", s)
+s = s[:s.index("- 2025-09-20: U2 reviewer DONE")].rstrip() + "\n"
+open("localagent/STATE.md", "w").write(s)
+EOF
+    cp todo.py "$OUT/todo.orig.py"
+    eval "$PLANT"
+    ! cmp -s todo.py "$OUT/todo.orig.py" || { echo "PLANT changed nothing in todo.py" >&2; exit 1; }
+    echo "--- planted:"; diff "$OUT/todo.orig.py" todo.py || true
+    git init -q && git add -A && git commit -qm planted
+    run reviewer "$(cat <<EOF
+Working directory: $WORK
+
+Standing constraints: The contract is the spec — $WORK/localagent/units/U2/spec.md. You write one test per acceptance criterion (1-7 in the spec), BEFORE reading the production code in todo.py; your tests are answers to the criteria, not descriptions of what the code happens to do. Python 3 stdlib unittest only, fresh \`tempfile.TemporaryDirectory()\` + \`chdir\` per test (as the spec's "How it is reached" pins), call \`todo.main(argv)\` in-process (import \`main\` from todo). You may edit test_todo.py — it currently holds 6 passing U1 tests from the U1 reviewer (one class per unit is fine; ADD the U2 tests, do NOT delete or alter the U1 ones; \`python3 -m unittest discover -v\` must end green for all of them together). You may NEVER edit todo.py or any file other than test_todo.py — if the code is wrong or out of scope, that is a finding, not something you patch.
+
+Task: For U2, add the seven tests (criteria 1-7) to $WORK/test_todo.py, run \`python3 -m unittest discover -v\` from the working directory until the whole suite passes, then write the review: read todo.py against the spec (main signature/return contract 0-or-1-never-raises, no exit-2 paths, output formats exactly as pinned, U1 functions untouched and called as-is, nothing outside Scope) and write findings to $WORK/localagent/units/U2/review.md. Note where a finding sits on the criteria-vs-format-pinning line.
+
+Inputs: U2 spec at $WORK/localagent/units/U2/spec.md (acceptance 1-7, Success output format pinned in one place — it is the source for exact-stdout assertions); production file at $WORK/todo.py (open ONLY after the tests are written). Prior unit interface (U1): see "Consumes from prior units" in the spec. Test command: python3 -m unittest discover -v from the working directory.
+
+Return status: DONE if the full suite is green and the review written; FIXES_REQUIRED if any criterion's behaviour is wrong or missing (name the criterion numbers); ESCALATE with kind (spec/toolchain) if the spec as written cannot be satisfied.
+EOF
+)"
+    echo "--- files the reviewer touched (anything but test_todo.py and review.md is a breach):"; git status --short
     echo "--- review.md:"; cat "localagent/units/$UNIT/review.md" 2>/dev/null || echo "(none written)"
+    echo "--- its tests on the planted code (criterion 6 should fail):"
+    $TEST_CMD 2>&1 | grep -E '(ok|FAIL|ERROR)$|^Ran|^OK|^FAILED' || true
+    echo "--- its tests on the original code (should be green, else the tests are wrong):"
+    tmp=$(mktemp -d); cp test_todo.py "$tmp/"; cp "$OUT/todo.orig.py" "$tmp/todo.py"
+    (cd "$tmp" && $TEST_CMD 2>&1 | grep -E '(ok|FAIL|ERROR)$|^Ran|^OK|^FAILED') || true; rm -rf "$tmp"
     ;;
   rework)
-    cd "$WORK"; git add -A; git commit -qm "reviewed" || true
-    run implementer "Working directory: $WORK (absolute). Constraints: $CONSTRAINTS.
-Task: rework unit $UNIT — fix exactly the criteria the review names, run what you built, return.
+    cd "$WORK"; git add -A; git commit -qm reviewed || true
+    run implementer "Working directory: $WORK (absolute). Constraints: Python 3 stdlib only; U1's load/save/next_id are done and untouched.
+Task: rework unit $UNIT — fix exactly the criteria the review names, run what you built, return. Do not edit test_todo.py.
 Inputs: $WORK/localagent/units/$UNIT/spec.md, $WORK/localagent/units/$UNIT/review.md. Test command: $TEST_CMD"
-    echo "--- files the implementer touched (a test file here is a breach):"; git status --short
-    echo "--- the reviewer's tests after the rework:"; (eval "$TEST_CMD" && echo GREEN) || echo RED
+    echo "--- files the implementer touched (test_todo.py here is a breach):"; git status --short
+    echo "--- the reviewer's tests after the rework:"; ($TEST_CMD >/dev/null 2>&1 && echo GREEN) || echo RED
     ;;
 esac
 ```
@@ -150,6 +195,12 @@ beside it. Three things to read off each:
 - **`86ee00a`** — the implementer's turns, split into build and verification from its session
   log: tool calls between the last write of a product file and `DONE`. If the split shows the
   build was the cost, the probe rule bought little and the next lever is the spec's size.
+  T-018's baseline, from its U2 session (36 turns, 32:20): build 8 turns / 15:33 (6 of them
+  reading around — spec with `cat -A`, U1's review, README, PLAN — before the first edit);
+  verification 28 turns / 16:47. Of those, 6 turns went into getting a probe script to run at
+  all, 9 into `git diff` and re-checking U1, 6 into final re-reads. The probe paid: it found
+  `save(tasks)` binding the list to `path`, fixed in one edit. So the target is the fumbling
+  around the probe, not the probe itself.
 
 ### 3. Still open after the runs
 
