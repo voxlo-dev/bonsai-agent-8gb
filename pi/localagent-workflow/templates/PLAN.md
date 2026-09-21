@@ -27,7 +27,10 @@ Binding for `localagent-scaffold`; decided with the user, not by an agent mid-ru
 ## Test Strategy
 
 - **Levels that matter here:** {unit / integration / e2e — and why}
-- **e2e surface?** {browser/UI or integration surface that justifies e2e — or "none"}; binding for the harness `localagent-scaffold` installs
+- **e2e surface?** {browser/UI · HTTP API · CLI · "none"}; settled here, binding for the harness
+  `localagent-scaffold` installs and for whether e2e runs at all in finalize. A UI is a surface. A
+  process with a real boundary is a surface: an API driven over HTTP, **a CLI driven as a
+  subprocess against real files**. A library nothing runs is not
 - **Existing tests to build on:** {paths, or "none"}
 
 ## Units

@@ -148,10 +148,11 @@ model a second round almost never converges, and the run's budget is turns.
 
 ## Phase 3 — Finalize
 
-1. **e2e** — dispatch `localagent-e2e` only if a surface exists: browser/UI (a `frontend`/`web`/
-   `client` dir, a UI-framework manifest, served HTML) or a meaningful integration one (API,
-   persistence, external service). Neither → skip, note `e2e: no surface` in STATE. Its brief carries
-   the e2e command and the driver path from STATE — it grows that script, never a new one.
+1. **e2e** — dispatch `localagent-e2e` exactly when `PLAN.md`'s **e2e surface?** names one. That
+   field was settled at the plan gate and is binding here as it was for scaffold: you do not judge
+   the surface again in finalize, however the code turned out. `none` there → skip, note
+   `e2e: no surface` in STATE. Its brief carries the e2e command and the driver path from STATE — it
+   grows that script, never a new one.
    **`FIXES_REQUIRED` routes like any red test:** the owning unit goes back to `implemented` and its
    implementer is re-dispatched with the failing step in acceptance-criterion terms and the report's
    path — then e2e re-runs. Counts as an attempt; no owning unit, or past its budget → escalate.
