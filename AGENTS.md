@@ -74,7 +74,7 @@ Docs are split by **lifespan**, and every fact has exactly one home:
 | `docs/localagent.md` | durable | the localagent workflow: its shape, how it runs on pi, and the measured runs behind it |
 | `docs/performance.md` | durable | what limits generation speed: the bandwidth roofline the numbers sit against, and the optimizations tried and rejected |
 | `docs/model-comparison.md` | durable | eight local models as coding agents on an 8 GB card, from the project thesis that predates this repo. Frozen: it is a translated record of a finished study, not a living page. New measurements go in `docs/dev.md` or a ticket |
-| `backlog/` | living | one file per ticket (`T-NNN-{slug}.md`), indexed in `backlog.md`, which carries the `Next ticket` counter |
+| `backlog/` | living | one file per ticket (`T-NNN-{slug}.md`), indexed in `backlog.md`, which carries the `Next ticket` counter. A ticket that is nobody else's business gets `.local.md` and stays out of the repo, so the numbering has gaps |
 | `artefacts/{sprint}/` | ephemeral | workflow run artifacts, bound to their sprint, frozen at `close-sprint`. Absent until the first sprint opens |
 | `.temp/` | ephemeral | gitignored scratch root, safe to delete at any time |
 | `runs/` | ephemeral | gitignored, but **kept**: one folder per long test run (`{ticket}-{slug}/`) with its `run.sh` and log, so a result stays readable after the chat that produced it |

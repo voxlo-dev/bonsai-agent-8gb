@@ -25,7 +25,7 @@ the repo is private, carries the tiers, the hardware disclaimer, acknowledgement
 1. **Rename** the repository to `bonsai-agent-8gb` and set the description to "A 27B coding agent
    that runs entirely on an 8 GB consumer GPU". `README.md`'s clone line already uses the new name,
    so it is wrong until the rename happens. GitHub redirects the old URL. Then
-   `git remote set-url origin` here and on the copy on the GPU box.
+   `git remote set-url origin` in every clone.
 2. **Topics:** `llama-cpp`, `ternary`, `bonsai`, `local-llm`, `coding-agent`, `8gb-vram`, `vulkan`,
    `quantization`.
 3. **Visibility public.** Issues on, PRs on, Discussions off for now; questions go to issues and

@@ -18,8 +18,8 @@ thing to keep in step with `LLAMA_COMMIT`.
 ## What
 
 1. Fork PrismML-Eng/llama.cpp on GitHub, `git am` the patch onto a branch off `1a07bfa` (the
-   pinned commit), push. There is no `gh` on the Werkbank, and the GPU box has no GitHub
-   access - this is a manual step from a machine that has both.
+   pinned commit), push. This is a manual step: the machine that built the patch and the machine
+   with a GitHub login are not the same one here.
 2. Open the PR with the text in `runs/T-016-ptq1_0-vulkan-decode/upstream-pr.md`: what was
    wrong, what changed, the `test-backend-ops` verification, the before/after table, what is
    left (a dedicated mat-vec kernel that keeps all five trits of a loaded word).

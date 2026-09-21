@@ -2,6 +2,10 @@
 
 Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
 
+Numbers have gaps: a closed ticket's file is deleted, and a ticket that is nobody else's business
+is named `T-NNN-{slug}.local.md`, which `.gitignore` keeps out of the repo. The counter below never
+reuses a number either way.
+
 **Next ticket: `T-030`**
 
 ## Draft
@@ -24,11 +28,10 @@ Closed on 2026-09-21: the history audit (clean, no rewrite needed), the MIT lice
 disclaimer, acknowledgements, the experimental label on the localagent workflow, and the terminal
 UX with `scripts/preflight.sh`.
 
-Remaining order: T-027 → T-017 opened → T-024 → T-028. T-020 and T-029 follow the reports and the
+Remaining order: T-027 → T-017 opened → T-024. T-020 and T-029 follow the reports and the
 upstream merge.
 
 - [`T-020`](T-020-supported-hardware.md) Finish the hardware table — 12/16 GB profiles and the rows that hardware reports bring in; the three tiers are already in the README · decision · medium · M
 - [`T-024`](T-024-public-repo-setup.md) Public repo setup — rename to `bonsai-agent-8gb`, visibility, topics, `v0.1.0`; the files are in the tree · chore · high · S
 - [`T-027`](T-027-quality-evidence.md) Put the quality claim on the record — one Bonsai run through OpenCode with the study's prompt, twice, so it joins the comparison table · spike · high · M
-- [`T-028`](T-028-launch.md) Launch — r/LocalLLaMA, llama.cpp discussion #22019, fork issue #185, after T-017 is open · chore · medium · S
 - [`T-029`](T-029-upstream-watch.md) Watch mainline — move off the fork when ggml-org takes PTQ1_0 (#29077), keep the Vulkan patch alive · decision · medium · M
