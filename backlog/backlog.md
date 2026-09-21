@@ -7,7 +7,7 @@ Numbers have gaps: a closed ticket's file is deleted, and a ticket that is nobod
 is named `T-NNN-{slug}.local.md`, which `.gitignore` keeps out of the repo. The counter below never
 reuses a number either way.
 
-**Next ticket: `T-030`**
+**Next ticket: `T-031`**
 
 ## Draft
 
@@ -22,6 +22,7 @@ reuses a number either way.
 - [`T-015`](T-015-context-safety-tokens.md) Decide whether to shrink pi's 4096-token safety margin — patch, upstream or leave · decision · low · S
 - [`T-017`](T-017-upstream-ptq1_0-vulkan-patch.md) Upstream the PTQ1_0 Vulkan decode to the fork — PR against #185 with the T-016 patch, then drop `patches/vulkan/` once the pin carries it · chore · medium · S
 - [`T-019`](T-019-workflow-cost.md) Cut what the localagent workflow still costs per unit — implementer self-verification, orchestrator bookkeeping, and a reviewer whose findings path has never run · spike · medium · M
+- [`T-030`](T-030-dispatch-runs-the-gate.md) Let `dispatch` run the orchestrator's two shell checks — test run and diff by the extension, the model keeps the decision · decision · medium · S
 
 ## Open source (release checklist)
 

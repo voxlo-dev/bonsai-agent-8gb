@@ -25,7 +25,7 @@ come from one machine and a handful of runs.
 | Known to work | one small feature, planned interactively with the user first, on the CUDA backend |
 | Not shown to work | large tasks, the reviewer's findings path (it has never fired), anything on the Vulkan backend at 7 tok/s |
 | Measured | two runs, T-013 and T-018, both below in [Economics](#economics) |
-| Open | [T-013](../backlog/T-013-localagent-first-run.md), [T-019](../backlog/T-019-workflow-cost.md) |
+| Open | [T-013](../backlog/T-013-localagent-first-run.md), [T-019](../backlog/T-019-workflow-cost.md), [T-030](../backlog/T-030-dispatch-runs-the-gate.md) |
 
 Its ancestor was evaluated across eight local models before this repo existed, and no model of
 that generation produced a working artifact through it; one held the whole process. That series is
