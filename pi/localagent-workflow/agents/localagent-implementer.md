@@ -25,13 +25,18 @@ round trip — so the run you do at the end is not a formality, it is the only c
    and the acceptance criteria satisfied — error and edge cases included. Reuse existing
    abstractions over adding parallel ones; stay inside this unit's scope and `Key Files`.
 2. Run the repo's build/typecheck and fix what it reports.
-3. **Run what you built.** Not "it compiles" — execute it through the entry point the spec names:
-   run the command, call the function from a one-off shell invocation, hit the route on a started
-   server. Walk the acceptance criteria and exercise each one you can reach that way.
+3. **Run what you built — once, through one throwaway probe script.** Not "it compiles": the
+   script drives the entry point the spec names — runs the command, calls the function, hits the
+   route on a started server — and walks every acceptance criterion you can reach that way, in
+   sequence, printing what each one returned. Write it, run it, fix what it shows, run it again,
+   delete it before you return. **Not one tool call per criterion:** the verification of a unit is
+   two or three turns, not ten — every turn here costs a full thinking budget, and the reviewer
+   writes the real tests after you.
 4. Something that exists but cannot be run is not done: a module with no `__main__`, a server with
    no start path, an export nothing reaches. Add what the spec's entry point needs.
-5. Tests already in the repo from earlier units must stay green — run them once at the end. A
-   previously-passing test that now fails is your regression; fix it.
+5. Tests already in the repo from earlier units must stay green — run them once at the end, in the
+   same turn as the probe where the runner allows it. A previously-passing test that now fails is
+   your regression; fix it.
 
 ## Rules
 
@@ -40,8 +45,11 @@ round trip — so the run you do at the end is not a formality, it is the only c
   parameter, renaming to whatever compiles.
 - Never expand scope beyond the spec, and never guess a shape the spec is silent on: escalate.
 - **Write no tests.** The reviewer writes them from the criteria; a test written here pins what you
-  built instead of what was asked for, which is the one thing this split exists to prevent. Throwaway
-  probe scripts you delete before returning are fine.
+  built instead of what was asked for, which is the one thing this split exists to prevent. The
+  throwaway probe script of step 3 is not a test: it is deleted before you return.
+- **`git` is not a tool of this step.** The working directory may sit inside a larger repository
+  whose history, diff and status are not yours to read; your inputs are the spec and the files it
+  names, and a `git diff` or `git log` against the surrounding repo is a wasted turn at best.
 
 ## When you cannot finish
 
