@@ -20,17 +20,20 @@ hardware-report template that feeds T-020's measured tier, plus a `config.yml` p
 questions at PrismML and mainline `PTQ1_0` support at ggml-org#29077. `README.md` no longer says
 the repo is private, carries the tiers, the hardware disclaimer, acknowledgements and the license.
 
-## What is left, all of it manual on github.com
+## Done on 2026-09-21
 
-1. **Rename** the repository to `bonsai-agent-8gb` and set the description to "A 27B coding agent
-   that runs entirely on an 8 GB consumer GPU". `README.md`'s clone line already uses the new name,
-   so it is wrong until the rename happens. GitHub redirects the old URL. Then
-   `git remote set-url origin` in every clone.
-2. **Topics:** `llama-cpp`, `ternary`, `bonsai`, `local-llm`, `coding-agent`, `8gb-vram`, `vulkan`,
-   `quantization`.
-3. **Visibility public.** Issues on, PRs on, Discussions off for now; questions go to issues and
-   the volume decides later. Wiki and Projects off.
-4. **Tag `v0.1.0`** on the commit whose `config.env` holds the current pins. Release notes are the
-   two measured cards with their numbers and the four pins verbatim. Later tags move with pins and
-   with nothing else.
-5. Check that the two issue templates render, since nobody can test a `.yml` form locally.
+Renamed to `bonsai-agent-8gb`, description and eight topics set, issues on, wiki, projects and
+discussions off, visibility public, local remote updated. Tag `v0.1.0` pushed and released, with
+the notes rewritten as markdown because a git tag message is plain text and its column alignment
+collapses on the release page.
+
+Two gh 2.46 quirks worth remembering: it has no `--accept-visibility-change-consequences` flag and
+prompts instead, and `--notes-from-tag` cannot be combined with `--repo`.
+
+## Still open
+
+- **Nobody has seen the two issue templates render.** A YAML form only parses server-side; the
+  files are in the repo but the fields are unverified. Open
+  <https://github.com/voxlo-dev/bonsai-agent-8gb/issues/new/choose> once and check both.
+- The `runs/` folders are gitignored, so the logs behind the measured numbers are not public. If a
+  hardware report or a reviewer asks for one, decide then whether to publish a subset.
