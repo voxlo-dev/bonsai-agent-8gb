@@ -20,7 +20,7 @@ reuses a number either way.
 - [`T-008`](T-008-vram-scaling.md) Measure context per VRAM size and with a shared display — derive CTX and the pi budget from free VRAM · decision · medium · M
 - [`T-013`](T-013-localagent-first-run.md) Run the localagent workflow on Bonsai — one small feature through `bonsai-pi --localagent`, where does a 27B model break the pipeline · spike · medium · M
 - [`T-015`](T-015-context-safety-tokens.md) Decide whether to shrink pi's 4096-token safety margin — patch, upstream or leave · decision · low · S
-- [`T-017`](T-017-upstream-ptq1_0-vulkan-patch.md) Upstream the PTQ1_0 Vulkan decode to the fork — PR against #185 with the T-016 patch, then drop `patches/vulkan/` once the pin carries it · chore · medium · S
+- [`T-017`](T-017-upstream-ptq1_0-vulkan-patch.md) Hand the PTQ1_0 Vulkan decode to the fork’s #185 — a comment with the measurement and the patch link, not a PR (two PRs were ahead, and the fork’s rules need an author who can defend every line); drop `patches/vulkan/` once a pin carries an equivalent · chore · medium · S
 - [`T-019`](T-019-workflow-cost.md) Cut what the localagent workflow still costs per unit — implementer self-verification, orchestrator bookkeeping, and a reviewer whose findings path has never run · spike · medium · M
 - [`T-030`](T-030-dispatch-runs-the-gate.md) Let `dispatch` run the orchestrator's two shell checks — test run and diff by the extension, the model keeps the decision · decision · medium · S
 
@@ -31,7 +31,7 @@ disclaimer, acknowledgements, the experimental label on the localagent workflow,
 UX with `scripts/preflight.sh`.
 
 Public since 2026-09-21 at <https://github.com/voxlo-dev/bonsai-agent-8gb>, tagged `v0.1.0`.
-Remaining order: T-027 → T-017 opened. T-020 and T-029 follow the reports and the upstream merge.
+Remaining order: T-027 → T-017 comment posted. T-020 and T-029 follow the reports and the upstream merge.
 
 - [`T-020`](T-020-supported-hardware.md) Finish the hardware table — 12/16 GB profiles and the rows that hardware reports bring in; the three tiers are already in the README · decision · medium · M
 - [`T-024`](T-024-public-repo-setup.md) Public repo setup — done except confirming the two issue templates render · chore · low · S
