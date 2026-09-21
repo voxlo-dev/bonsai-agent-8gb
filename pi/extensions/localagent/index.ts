@@ -134,8 +134,17 @@ export default function (pi: ExtensionAPI) {
 		let turns = 0;
 		let final: any;
 		let stderr = "";
+		// What the agent is doing, as far as its event stream shows it: the orchestrator only ever
+		// gets the status line back, so this is the one live view of a dispatch. The full one is
+		// the child's session JSONL - see runs/watch-dispatch.py.
+		let usage = "";
+		let said = "";
+		const trim = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
 		const progress = (what: string) =>
-			onUpdate?.({ content: [{ type: "text", text: `${name} · turn ${turns} · ${what}` }], details: {} });
+			onUpdate?.({
+				content: [{ type: "text", text: [`${name} · turn ${turns}${usage} · ${what}`, said].filter(Boolean).join("\n") }],
+				details: {},
+			});
 
 		const code = await new Promise<number>((resolve) => {
 			const [cmd, argv] = piInvocation(args);
@@ -150,10 +159,20 @@ export default function (pi: ExtensionAPI) {
 				}
 				if (event.type === "tool_execution_start") {
 					const a = event.args ?? {};
-					progress(`${event.toolName} ${String(a.path ?? a.command ?? "").slice(0, 80)}`);
+					progress(`${event.toolName} ${trim(String(a.path ?? a.command ?? JSON.stringify(a)).replace(/\s+/g, " "), 300)}`);
 				} else if (event.type === "message_end" && event.message?.role === "assistant") {
 					turns++;
 					final = event.message;
+					const u = event.message.usage ?? {};
+					usage = u.totalTokens ? ` · ${u.output ?? 0} out · ${u.totalTokens} ctx` : "";
+					// Its own words beat "thinking": the last line of whatever it just said or thought.
+					const parts = Array.isArray(event.message.content) ? event.message.content : [];
+					const spoke = parts
+						.map((p: any) => (p.type === "text" ? p.text : p.type === "thinking" ? p.thinking : ""))
+						.filter(Boolean)
+						.join("\n")
+						.trim();
+					said = spoke ? trim(spoke.split("\n").filter(Boolean).at(-1) ?? "", 300) : "";
 					progress("thinking");
 				}
 			};
