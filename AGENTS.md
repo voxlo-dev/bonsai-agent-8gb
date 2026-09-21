@@ -1,88 +1,113 @@
 # AGENTS.md
 
-Agent-agnostic project guide — the single source for domain, structure and code style. `README.md` is for users, this file for contributors and AI agents.
+Where a contributor or an AI agent starts. `README.md` is for people using this;
+`CONTRIBUTING.md` is the short human version of this file.
 
-## Project outline
+## What this repo is
 
-This repo is **not an application**. It is a reproducible setup: bash scripts that build a patched llama.cpp, fetch a pinned GGUF, and configure the [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) coding agent against it. There is no source code to compile here — the thing being assembled lives in `~/.local/share/bonsai-local` (`BONSAI_HOME`).
+**Not an application.** Bash scripts that build a patched llama.cpp, fetch a pinned GGUF and
+configure the [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) coding agent
+against it. Nothing here compiles into a product; the thing being assembled lives in
+`~/.local/share/bonsai-local` (`BONSAI_HOME`).
+
+Which means the code is short and the **reasons are the product**. Every non-default choice - a
+flag, a cache type, a token count - answers a failure observed on real hardware, and that reason
+lives in [`docs/dev.md`](docs/dev.md) with the measurement behind it. A change without one is
+incomplete, and a change that contradicts one needs a new measurement, not an argument.
+
+## Map
 
 | Path | Role |
 | --- | --- |
 | `config.env` | **Single source of truth.** Every setting, with `: "${VAR:=default}"` so an environment variable always wins. Sources the profile first |
 | `profiles/{dedicated,display}.env` | `CTX` and the four budget values, per GPU situation (`PROFILE`, default `dedicated`). They constrain each other, so they move together |
-| `install.sh` | Step runner: `deps build model pi link`, all of them by default |
+| `install.sh` | Step runner: `deps build model pi link`, all of them by default. Runs `preflight` first |
+| `scripts/preflight.sh` | Gates a run before it spends time: disk, RAM, driver, VRAM, Node, port. Reports every item, exits once. `SKIP_PREFLIGHT=1` bypasses it |
 | `scripts/lib.sh` | Sourced first by every step; sources `config.env` and defines `log`/`warn`/`die`/`has` |
 | `scripts/{deps,build,model,pi}.sh` | One install step each, individually re-runnable and idempotent. `deps` and `build` branch on `BACKEND` (`cuda`, `vulkan`) |
-| `patches/{backend}/*.patch` | Applied by `build` to the fork at `LLAMA_COMMIT`, in name order, for that backend only. Today: the PTQ1_0 Vulkan decode (T-016), until upstream takes it |
+| `patches/{backend}/*.patch` | Applied by `build` to the fork at `LLAMA_COMMIT`, in name order, for that backend only. Today: the PTQ1_0 Vulkan decode, until upstream takes it (T-017) |
 | `bin/bonsai-server` | The launcher. Sources `config.env` **directly**, not through `lib.sh` |
 | `bin/bonsai-pi` | Starts the pinned pi with `PI_CODING_AGENT_DIR` set to `PI_AGENT_DIR`, and starts/stops `bonsai-server` around it when none runs. State in `$BONSAI_HOME/run/`. Same sourcing as `bonsai-server` |
 | `pi/pi-agents.md` | Runtime artifact, copied to `$PI_AGENT_DIR/AGENTS.md`. **Not this file** |
-| `pi/extensions/localagent/` | pi extension behind `bonsai-pi --localagent`: the `dispatch` tool, and the session's `hasUI` for the plan gate. Copied with the workflow into `$PI_AGENT_DIR/extensions/localagent/` |
-| `pi/localagent-workflow/` | The workflow it runs (skill, seven agent prompts, templates). Adapted from an OpenCode workflow; its setup and dispatch parts rewritten for pi |
+| `pi/extensions/localagent/` | pi extension behind `bonsai-pi --localagent`: the `dispatch` tool, and the session's `hasUI` for the plan gate |
+| `pi/localagent-workflow/` | The workflow it runs: skill, seven agent prompts, templates. The author's own, from the study in `docs/model-comparison.md`, with its setup and dispatch parts rewritten for pi |
 
-**Two consumers, one config.** `config.env` feeds both the llama-server command line and, through `scripts/pi.sh`, a JSON config written into `PI_AGENT_DIR` (`$BONSAI_HOME/pi-agent`), a private pi instance that never touches `~/.pi`. They drift silently: the server takes its values at start, pi keeps a written copy. After changing `CTX`, `SERVER_HOST`, `PORT`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, `./install.sh pi` must run again.
+## Four things that bite
 
-**The context budget is arithmetic, not taste.** `CTX`, `BUDGET`, `MAX_TOKENS`, `RESERVE_TOKENS` and `KEEP_RECENT_TOKENS` constrain each other, which is why they live in a profile and move together; getting them wrong makes pi compact on every single turn or lets it request more tokens than the window holds. The constraints and the measurements behind them are in [`docs/dev.md`](docs/dev.md#context-budget). Do not change one of them alone.
+**Two consumers, one config.** `config.env` feeds both the llama-server command line and, through
+`scripts/pi.sh`, a JSON config written into `PI_AGENT_DIR`. They drift silently: the server takes
+its values at start, pi keeps a written copy. After changing `CTX`, `SERVER_HOST`, `PORT`,
+`MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS`, `./install.sh pi` must run again.
 
-## Build / test / run
+**The context budget is arithmetic, not taste.** `CTX`, `BUDGET`, `MAX_TOKENS`, `RESERVE_TOKENS`
+and `KEEP_RECENT_TOKENS` constrain each other, which is why they live in a profile and move
+together. Getting them wrong makes pi compact on every single turn, or lets it ask for more tokens
+than the window holds. Never change one alone; the constraints are in
+[`docs/dev.md`](docs/dev.md#context-budget).
 
-- Build: `./install.sh` (or a single step: `./install.sh build`; `FORCE=1 ./install.sh build` rebuilds; `BACKEND=vulkan` for AMD)
-- Test:  **none** — there is no test framework; see Conventions
-- Run:   `bonsai-pi` (starts the server itself), or `bonsai-server` first to keep it running
-- Version: unversioned; the repo pins what matters instead (`LLAMA_COMMIT`, `MODEL_REV`, `MODEL_SHA256`, `PI_VERSION` in `config.env`)
+**Pins are deliberate.** `LLAMA_COMMIT`, `MODEL_REV` and `MODEL_SHA256` exist because the model
+needs a fork mainline llama.cpp has not absorbed. `PI_VERSION` pins the compaction code the budget
+was measured against. Moving any of them means re-testing load and speed, checking that `patches/`
+still applies (`build` refuses when it does not), and for `PI_VERSION` re-checking the budget.
 
-## Conventions
+**Nothing is installed into the repo, and nothing into the user's own tools.** Build output, the
+model and pi's config live outside it. No global npm package, nothing under `~/.pi`: a user's
+existing pi keeps its providers, defaults and compaction settings.
 
-- **Every non-default choice is justified in `docs/dev.md`, with the measurement behind it.** That is the repo's actual product — the scripts are short, the reasons are not. A new flag or setting without a `docs/dev.md` entry is incomplete.
-- **Pins are deliberate.** `LLAMA_COMMIT`, `MODEL_REV` and `MODEL_SHA256` exist because the model needs a fork that mainline llama.cpp has not absorbed. Moving a pin means re-testing load and speed, and checking that `patches/` still applies (`build` refuses when it does not). `PI_VERSION` pins the compaction code the context budget was measured against; moving it means re-checking [`docs/dev.md`](docs/dev.md#context-budget).
-- **Steps stay idempotent.** Each script checks whether its work is already done and exits early.
-- **Nothing is installed into the repo.** Build output, the model and pi's config all live outside it.
-- **Nothing is installed into the user's own tools.** No global npm package, nothing under `~/.pi`: a user's existing pi keeps its providers, defaults and compaction settings.
+## Working on it
 
-### Verifying a change
+```bash
+./install.sh                       # everything; FORCE=1 ./install.sh build rebuilds
+BACKEND=vulkan ./install.sh build  # the AMD path, patches and all
+bonsai-pi                          # starts the server itself
+```
 
-There is no test suite, and adding one was considered and declined (bash, no framework, one user). Verify by observation instead:
+Unversioned: the repo pins what matters instead. Each step checks whether its work is done and
+exits early, so a second run is cheap and says so.
 
-- Server flags: start it and query `http://127.0.0.1:8080/props`, or render a conversation through `/apply-template` to see what the chat template actually produces
-- The Vulkan path: `runs/T-016-ptq1_0-vulkan-decode/measure.sh` on the GPU box (generation and an 847-token prompt at a given window); judge by tok/s, not by VRAM, which RADV reports meaningfully only after the first request
-- pi's config: read back `$BONSAI_HOME/pi-agent/{models,settings}.json`
-- pi's behaviour: its session logs are JSONL at `$BONSAI_HOME/pi-agent/sessions/{cwd-slug}/` (sessions before the private instance: `~/.pi/agent/sessions/`), one entry per message, with `usage` token counts and `compaction` records — that is where a context problem is visible
-- `bash -n` on any script touched
-- The preflight gates: `scripts/preflight.sh` on a machine that fails them (no GPU, wrong `BACKEND`, too little disk) should stop with one screen of output and touch nothing
+**There is no test suite.** Adding one was considered and declined: it is bash, there is no
+framework, and what breaks is behaviour under a real model on a real card. Verify by observation.
 
-### Code style
+| Change | How to see it worked |
+| --- | --- |
+| Any script | `bash -n`, and run the step twice to confirm it is still idempotent |
+| Preflight | run it where it should fail (no GPU, wrong `BACKEND`, too little disk): one screen, nothing touched |
+| Server flags | start it, query `http://127.0.0.1:8080/props`, or render a conversation through `/apply-template` |
+| Vulkan kernels | generation and an ~850-token prompt at a stated window, judged by tok/s. VRAM is misleading: RADV only reports it meaningfully after the first request |
+| pi's config | read back `$BONSAI_HOME/pi-agent/{models,settings}.json` |
+| pi's behaviour | its session logs, JSONL under `$BONSAI_HOME/pi-agent/sessions/{cwd-slug}/`, one entry per message with `usage` counts and `compaction` records. That is where a context problem is visible |
 
-- POSIX-ish bash, `set -euo pipefail` via `lib.sh`; `bin/bonsai-server` sets it itself
+A long measurement gets a folder under `runs/{ticket}-{slug}/` with its script and log. `runs/` is
+gitignored but kept, so a result stays readable after the session that produced it; the conclusion
+belongs in `docs/`.
+
+## Code style
+
+- POSIX-ish bash, `set -euo pipefail` via `lib.sh`; `bin/bonsai-server` and `bin/bonsai-pi` set it
+  themselves
 - A comment block at the top of every script saying what it does and what it needs
-- Settings are declared in `config.env` only (the window and budget values in `profiles/*.env`), never hard-coded in a consumer
-- `SPDX-License-Identifier: MIT` on the second line of every script (first, in a file with no shebang)
+- `SPDX-License-Identifier: MIT` on the second line, or the first in a file with no shebang
+- Settings are declared in `config.env` only, or `profiles/*.env` for the window and budget values.
+  Never hard-code one in a consumer
+- Messages go through `log`/`warn`/`die`. A `die` says what to do next, and names a
+  `docs/dev.md` anchor when there is one
 
-## Doc map
+## Where facts live
 
-Docs are split by **lifespan**, and every fact has exactly one home:
+Every fact has one home, chosen by how long it stays true.
 
-- **durable** — `docs/`, truth about the shipped system, versioned with the code
-- **living** — `backlog/`, open work, carried across sprints, dissolved once shipped
-- **ephemeral** — `artefacts/`, process memory: live for the running sprint, frozen when `close-sprint` closes it
-
-| Doc | Tier | Content |
+| | Lifespan | Holds |
 | --- | --- | --- |
-| `README.md` | — | user-facing entry point: install, use, configure |
-| `AGENTS.md` | — | this file: structure, code style, conventions |
-| `CONTRIBUTING.md` | — | the human-facing short form of this file: the measurement rule, what gets declined |
-| `docs/dev.md` | durable | why each non-default choice is what it is, with the measurement behind it; plus troubleshooting. Doubles as this project's decisions log |
-| `docs/localagent.md` | durable | the localagent workflow: its shape, how it runs on pi, and the measured runs behind it |
-| `docs/performance.md` | durable | what limits generation speed: the bandwidth roofline the numbers sit against, and the optimizations tried and rejected |
-| `docs/model-comparison.md` | durable | eight local models as coding agents on an 8 GB card, from the project thesis that predates this repo. Frozen: it is a translated record of a finished study, not a living page. New measurements go in `docs/dev.md` or a ticket |
-| `backlog/` | living | one file per ticket (`T-NNN-{slug}.md`), indexed in `backlog.md`, which carries the `Next ticket` counter. A ticket that is nobody else's business gets `.local.md` and stays out of the repo, so the numbering has gaps |
-| `artefacts/{sprint}/` | ephemeral | workflow run artifacts, bound to their sprint, frozen at `close-sprint`. Absent until the first sprint opens |
-| `.temp/` | ephemeral | gitignored scratch root, safe to delete at any time |
-| `runs/` | ephemeral | gitignored, but **kept**: one folder per long test run (`{ticket}-{slug}/`) with its `run.sh` and log, so a result stays readable after the chat that produced it |
+| `README.md` | — | the user-facing entry point: what it is, install, use, configure |
+| `AGENTS.md` | — | this file |
+| `CONTRIBUTING.md` | — | the short human form of this file: the measurement rule, what gets declined |
+| `docs/dev.md` | durable | why each non-default choice is what it is, with its measurement, plus troubleshooting. Also this project's decisions log |
+| `docs/performance.md` | durable | what limits generation speed: the bandwidth roofline, and the optimizations tried and rejected |
+| `docs/localagent.md` | durable | the experimental workflow: shape, how it runs on pi, the measured runs |
+| `docs/model-comparison.md` | durable | eight local models as coding agents on 8 GB, from the study predating this repo. **Frozen**: a record of finished work. New measurements go to `docs/dev.md` or a ticket |
+| `backlog/` | living | one file per ticket, `T-NNN-{slug}.md`, indexed in `backlog.md` with the `Next ticket` counter. A private one gets `.local.md` and stays out of the repo, so the numbers have gaps |
+| `runs/` | ephemeral | gitignored but kept: one folder per long measurement |
+| `.temp/` | ephemeral | gitignored scratch, safe to delete at any time |
 
-## Current sprint
-
-`none`
-
-<!-- The only living pointer that belongs in AGENTS.md. Other living state has a lifespan-correct
-     home: goals → the sprint file; open work & open decisions → `backlog/`;
-     gotchas/learnings → project memory (`maintain-memory`). -->
+Closing a ticket means its result is in `docs/` and its file is deleted. Nothing is left behind as
+a note.

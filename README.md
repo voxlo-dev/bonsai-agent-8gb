@@ -250,25 +250,29 @@ has the way from there to 7.
 
 ### The one change worth more than any flag
 
-**Do not let this GPU drive your monitor.** A Windows desktop on the same card takes 0.5 to 1.2 GB
-of VRAM and competes for GPU time, and both of those come straight out of the model. Moving the
-display to the motherboard's integrated GPU - enable the iGPU in the BIOS, plug the monitor into
-the mainboard, and set browsers to "Power saving" under Windows *Settings, System, Display,
-Graphics* - took generation from 21 to 34 tok/s in the same session on the reference machine.
-
-That is a bigger win than every tuning knob in this repo combined, and it costs nothing but a
-cable. If you cannot do it, use `PROFILE=display`, which drops the window to 48k to make room for
-the desktop.
+**Do not let this GPU drive your monitor.** A desktop on the same card takes 0.5 to 1.2 GB of VRAM
+and competes for GPU time, and both come out of the model: moving the display to the motherboard's
+iGPU took generation from 21 to 34 tok/s in the same session. Enable the iGPU in the BIOS, plug the
+monitor into the mainboard, and set browsers to "Power saving" under Windows *Settings, System,
+Display, Graphics*. It costs a cable and beats every tuning knob in this repo combined. If you
+cannot, `PROFILE=display` drops the window to 48k to make room.
 
 ## Docs
 
 | | |
 | --- | --- |
-| [docs/dev.md](docs/dev.md) | why every non-default choice is what it is, with the measurement behind it, plus troubleshooting |
-| [docs/performance.md](docs/performance.md) | what limits generation speed, and the optimizations tried and rejected |
-| [docs/model-comparison.md](docs/model-comparison.md) | eight local models as coding agents on an 8 GB card, measured before this repo existed |
+| [docs/dev.md](docs/dev.md) | why every non-default choice is what it is, with its measurement, plus troubleshooting |
+| [docs/performance.md](docs/performance.md) | what limits generation speed, and what was tried and rejected |
+| [docs/model-comparison.md](docs/model-comparison.md) | eight local models as coding agents on 8 GB, measured before this repo existed |
 | [docs/localagent.md](docs/localagent.md) | the experimental multi-agent workflow |
 | [AGENTS.md](AGENTS.md) | where contributors and AI agents start |
+
+## Contributing
+
+Issues and pull requests welcome, and a
+[hardware report](../../issues/new?template=hardware-report.yml) most of all: two cards have been
+measured, everything else under [Requirements](#requirements) is a guess. [CONTRIBUTING.md](CONTRIBUTING.md) has the
+one rule, which is that a non-default choice arrives with the measurement that justifies it.
 
 ## Uninstall
 
@@ -276,49 +280,35 @@ the desktop.
 rm -rf ~/.local/share/bonsai-local ~/.local/bin/bonsai-server ~/.local/bin/bonsai-pi
 ```
 
-This includes pi and its sessions. `~/.cache/ccache` holds the build cache, and the apt packages from `deps` stay installed.
+That includes pi and its sessions. The build cache in `~/.cache/ccache` and the apt packages from
+`deps` stay.
 
-## Contributing
+## Your hardware
 
-Issues and pull requests are welcome, especially [hardware reports](../../issues/new?template=hardware-report.yml).
-[CONTRIBUTING.md](CONTRIBUTING.md) has the one rule that matters: a non-default choice arrives
-with the measurement that justifies it.
+This fills an 8 GB card to within a few hundred megabytes and forces full offload with `-ngl 99`,
+because partial offload costs this architecture about ten times its decode speed. That is a memory
+allocation, not an electrical one: nothing here overclocks, raises a power limit or touches a fan
+curve, and the clock experiments in [docs/performance.md](docs/performance.md) are results, not
+settings. Expect sustained full GPU load for as long as a session runs. Your cooling, power supply,
+driver and any knob you turn yourself are yours. Provided as is, no warranty: see
+[LICENSE](LICENSE).
 
-## A word on your hardware
+## Credits
 
-This setup deliberately fills an 8 GB card to within a few hundred megabytes and forces full
-offload with `-ngl 99`, because partial offload costs this architecture about ten times its decode
-speed. That is a memory allocation, not an electrical one: nothing here overclocks, raises a power
-limit or touches a fan curve by default. The clock and power experiments in
-[docs/performance.md](docs/performance.md) are recorded as results, not as settings, and they are
-not applied.
+A thin layer on other people's work.
 
-What you should expect: sustained full GPU load for as long as a session runs, and a server that
-fails to start if something else is holding VRAM. What you are responsible for: your cooling, your
-power supply, your driver, and any tuning knob you turn yourself. The software is provided as is,
-without warranty of any kind - see [LICENSE](LICENSE).
-
-## Acknowledgements
-
-This repo is a thin layer on other people's work.
-
-- [PrismML](https://prismml.com) for Ternary Bonsai 2 27B, the `PTQ1_0` ternary format and the
+- [PrismML](https://prismml.com) for Ternary Bonsai 2 27B, the `PTQ1_0` format and the
   [llama.cpp fork](https://github.com/PrismML-Eng/llama.cpp) that loads it
-- [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) and its contributors, including the
-  authors of the IQ-grid Vulkan shaders that the `PTQ1_0` decode in [`patches/vulkan`](patches/vulkan/)
-  follows
+- [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp) and its contributors, including
+  whoever wrote the IQ-grid Vulkan shaders that [`patches/vulkan`](patches/vulkan/) follows
 - The reporter of [PrismML-Eng/llama.cpp#185](https://github.com/PrismML-Eng/llama.cpp/issues/185),
-  whose issue made the Vulkan work findable
-- [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) by earendil-works, the coding
-  agent this configures
-- The Mesa and RADV developers; `RADV_PERFTEST=nogttspill` is worth a factor of 1.22 here
+  who made the Vulkan work findable
+- [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) by earendil-works
+- Mesa and RADV; `RADV_PERFTEST=nogttspill` alone is worth 1.22x here
 
-The model weights are PrismML's, Apache-2.0 licensed, downloaded from Hugging Face at install time
-and never redistributed by this repo. The evaluation in
-[docs/model-comparison.md](docs/model-comparison.md) and the localagent workflow come from a
+The weights are PrismML's under Apache-2.0, downloaded at install time and never redistributed
+here. [docs/model-comparison.md](docs/model-comparison.md) and the localagent workflow come from a
 project thesis at Technische Hochschule Mittelhessen by this repo's author.
 
-## License
-
-[MIT](LICENSE). The `PTQ1_0` Vulkan decode in [`patches/vulkan`](patches/vulkan/) is a change to
-llama.cpp, which is MIT, and is offered upstream under the same terms.
+**License: [MIT](LICENSE).** The `PTQ1_0` Vulkan decode in [`patches/vulkan`](patches/vulkan/)
+changes llama.cpp, which is MIT, and is offered upstream under the same terms.

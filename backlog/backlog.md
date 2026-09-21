@@ -1,6 +1,7 @@
 # Backlog — bonsai-local
 
-Ticket index · template: `~/.agents/skills/plan/templates/TICKET_TEMPLATE.md`
+Ticket index. A ticket is a file: summary, category, importance, effort, what depends on it,
+then **Why** and **What**. Copy the shape of any open one.
 
 Numbers have gaps: a closed ticket's file is deleted, and a ticket that is nobody else's business
 is named `T-NNN-{slug}.local.md`, which `.gitignore` keeps out of the repo. The counter below never
