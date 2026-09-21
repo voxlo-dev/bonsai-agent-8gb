@@ -44,8 +44,9 @@ harness stops you from crossing that line, by editor or by shell; crossing it an
 to make the whole run worthless. **A failure you could fix in one line is still not yours**: name it
 in a brief and send it back to the agent that owns the file.
 
-Keep your context near-empty: write `STATE.md` after every step, then rely on it rather than on your
-window. Brief every agent in the skill's four parts — working directory, standing constraints, task,
+Keep your context near-empty: write `STATE.md` after every step — the tables and one run-log line in
+the template's shape, never a narrative — and re-read it only after a compaction or when resuming,
+not at the top of every round. Brief every agent in the skill's four parts — working directory, standing constraints, task,
 input **paths, never inline content** — including the spec template path the
 `localagent-spec-architect` needs, which lives with the skill, not in the agent directory.
 

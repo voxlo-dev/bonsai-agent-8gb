@@ -80,8 +80,11 @@ The tests and the production code go into the repo's normal trees; docs are upda
 Everything under `localagent/` records one run: committed with it, never edited afterwards, not
 living documentation.
 
-**Write `STATE.md` after every step and re-read it at the start of the next round** — a context reset
-must be survivable from it alone. Shape, status ladder and `Attempts`: `templates/STATE.md`.
+**Write `STATE.md` after every step** — a context reset must be survivable from it alone. Shape,
+status ladder, `Attempts` and the one-line run log: `templates/STATE.md`. **Re-read it only when you
+have lost it**: after a compaction (its summary sits in your window) or when resuming a session. Only
+status lines come back to you, so between those two events your window still holds the ledger, and
+a read at the top of every round is a full turn spent on nothing.
 
 ## Phase 1 — Plan, then the gate
 
@@ -125,7 +128,7 @@ Seed `STATE.md` from the approved unit list, then loop:
 3. **Check, then update.** On the reviewer's `DONE`, run the test command yourself and `git diff` the
    unit — the gate is yours, not the agent's claim. Green, and neither agent in the other's files →
    `done`: append the unit's interface line, reset `Attempts`. Otherwise rework per the table below.
-   Re-read `STATE.md`, continue.
+   Append the run-log line, continue.
 4. All units `done` → finalize.
 
 ### Who fixes what
@@ -157,6 +160,9 @@ model a second round almost never converges, and the run's budget is turns.
    implementer is re-dispatched with the failing step in acceptance-criterion terms and the report's
    path — then e2e re-runs. Counts as an attempt; no owning unit, or past its budget → escalate.
 2. **docs** — dispatch `localagent-docs`.
+   **No smoke test of your own.** Every unit passed your test run and its diff check, and e2e ran
+   where the plan named a surface; a final run of the product by you is not a gate the skill has,
+   only turns.
 3. **memory** — persist the run's durable decisions and gotchas wherever the project keeps them, and
    prune what went stale.
 4. Update the project's work tracking if it has any, then commit / PR per its version-control rules.
