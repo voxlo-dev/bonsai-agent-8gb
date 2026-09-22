@@ -20,7 +20,7 @@ Binding for `localagent-scaffold`; decided with the user, not by an agent mid-ru
 
 - **Language / runtime:** {and version}
 - **Package manager:** {}
-- **Test runner:** {and the command that runs it}
+- **Test runner:** {name, version, and the exact command that runs it — the scaffold installs exactly this and guesses nothing}
 - **Key libraries:** {only what the features actually need — or "none"}
 - **Already set up?** {what the repo already has, or "empty repo — scaffold from scratch"}
 
@@ -35,13 +35,14 @@ Binding for `localagent-scaffold`; decided with the user, not by an agent mid-ru
 
 ## Units
 
-Small, independently implementable + testable — each bounds every later agent's context and costs one
-spec/implement/review cycle.
+One unit is **one worker dispatch, and a dispatch is cut off after a fixed number of turns**. So a
+unit is what one agent can spec, test and build in a dozen turns: **one file, three to five
+acceptance criteria.** A relay server with a lobby, a tick loop and reconnect handling is three
+units, not one; a rules engine with movement, collision and scoring is two. More units cost one
+dispatch each and nothing else; a unit too big costs the dispatch and comes back with nothing.
 
-**Fewer than feels natural.** A unit is something that can fail its own test, not a layer, a folder
-or a file. Splitting by architecture (types · server · client · state) multiplies specs and
-interfaces without adding coverage, and three dispatches per unit is what the run is paying for. A
-small project is 2–4 units; reach for more only when the features genuinely are.
+Cut by behaviour that can fail its own test, not by architecture: "room codes and join
+validation", not "types". Order them so each builds on finished ones.
 
 | ID | Title | Scope (one line) | Depends on |
 | --- | --- | --- | --- |

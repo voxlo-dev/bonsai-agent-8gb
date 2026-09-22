@@ -38,7 +38,7 @@ the plan and approved by the user; you install exactly that.
 
 - **Ship no code.** Not a module, not a stub, not a smoke test, not a base class "to get started" —
   empty directories, config and the empty e2e driver script only. Every line of logic belongs to a
-  unit, written blind against a contract, and anything you leave behind pre-empts that. If you find yourself debugging your own
+  unit and its worker, and anything you leave behind pre-empts that. If you find yourself debugging your own
   output, you built too much.
 - **One layout, the simplest that fits.** A single-page app is one package: no workspaces, no
   monorepo, no `server/` + `shared/` split unless the plan names them. Same for the config — a

@@ -1,42 +1,35 @@
 # Spec: U{N} — {Title}
 
-> The unit's whole contract: interface, behaviour, acceptance. The implementer builds from this file
-> and the reviewer writes one test per criterion from it. **~80 lines at most** — it is read twice.
+> Written by the unit's worker before its tests and its code. What it says is the contract; how
+> long it is does not matter and is not checked.
 
 ## Interface
 
-What this unit exposes, in prose — one line per symbol: where it lives, what it takes, what it
-returns, what it raises.
+One line per symbol: where it lives, what it takes, what it returns, what it raises.
 
 - `{path}`: `{name}({args})` → {what comes back}; raises {when}
 
 How it is reached from outside — the command, the route, the entry point — or "none but the symbols
 above":
 
-- `{METHOD} {route}` → {request} ⇒ {response}  ·  `{cli command}` → {what it prints / its exit code}
-
-## Scope
-
-- {exactly what this unit creates or changes}
-
-## Out of Scope
-
-- {what this unit must not touch — behaviour owned by another unit}
+- `{cli command}` → {what it prints / its exit code}  ·  `{METHOD} {route}` → {request} ⇒ {response}
 
 ## Behaviour
 
-- {observable behaviour, concrete enough to implement against}
+- {observable behaviour, concrete enough to build against; the details the plan left open, decided}
 - {error / edge cases and their expected handling}
+
+## Out of scope
+
+- {what this unit must not touch — behaviour another unit owns}
 
 ## Acceptance
 
-1. {observable condition that must hold — the reviewer writes one test per line here}
+Three to five. Each becomes one test, named after it.
+
+1. {observable condition that must hold}
 2. ...
 
-## Consumes from prior units
+## Builds on
 
-- {interface line this builds on — copy from STATE Interfaces} — or "none"
-
-## Key Files
-
-- {path}: {create | modify — what}
+- {interface line from the brief} — or "none"

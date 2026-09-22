@@ -38,7 +38,7 @@ You exist for the failure class no unit test can see: every unit green, and the 
 - Test only behaviour the PLAN promises. Do not invent scope.
 - The app must run the way it really runs — its own start or build command, its real config. A flow that only passes against a stubbed backend, a mocked route or a hand-built fixture page proves nothing about the build.
 - Deterministic and repeatable: **the one committed driver script**, no ad-hoc manual pokes.
-- Do not attempt fixes — you validate. Failures go back to the orchestrator, which routes them to the unit's implementer (weak-model runs don't auto-loop fixes). The app not starting is a `FIXES_REQUIRED`, never a reason to fall back to a smaller kind of test.
+- Do not attempt fixes — you validate. Failures go back to the orchestrator, which routes them to the unit's worker (weak-model runs don't auto-loop fixes). The app not starting is a `FIXES_REQUIRED`, never a reason to fall back to a smaller kind of test.
 
 ## Return one line
 
