@@ -1,7 +1,7 @@
 # The localagent workflow
 
-A multi-agent build pipeline for a weak local model: plan gate, then per unit
-spec -> implement -> review, then e2e and docs. It lives in
+A multi-agent build pipeline for a weak local model: plan gate, then one worker dispatch per
+small unit (spec -> tests -> code -> test run), then e2e and docs. It lives in
 [`pi/localagent-workflow/`](../pi/localagent-workflow/) and runs as `bonsai-pi --localagent`
 through the extension in [`pi/extensions/localagent/`](../pi/extensions/localagent/).
 
@@ -22,10 +22,10 @@ come from one machine and a handful of runs.
 
 | | |
 | --- | --- |
-| Known to work | one small feature, planned interactively with the user first, on the CUDA backend |
-| Not shown to work | large tasks, the reviewer's findings path (it has never fired), anything on the Vulkan backend at 7 tok/s |
-| Measured | two runs, T-013 and T-018, both below in [Economics](#economics) |
-| Open | [T-013](../backlog/T-013-localagent-first-run.md), [T-019](../backlog/T-019-workflow-cost.md), [T-030](../backlog/T-030-dispatch-runs-the-gate.md) |
+| Known to work | one small feature (a todo CLI), planned interactively with the user first, on the CUDA backend, in the previous three-agent shape |
+| Not shown to work | **the current shape** (one worker per unit, harness gate, turn limit, agent budget) has not run yet; large tasks (the Tron run below was aborted after five hours); anything on the Vulkan backend at 7 tok/s |
+| Measured | three runs, T-013, T-018 and the Tron run, all below in [Economics](#economics) |
+| Open | [T-013](../backlog/T-013-localagent-first-run.md), [T-019](../backlog/T-019-workflow-cost.md), [T-031](../backlog/T-031-sharp-chat-template.md) |
 
 Its ancestor was evaluated across eight local models before this repo existed, and no model of
 that generation produced a working artifact through it; one held the whole process. That series is
@@ -37,14 +37,16 @@ what a multi-agent workflow costs a local model.
 | Phase | Step | Agent |
 | --- | --- | --- |
 | Plan | plan with the user, **gate**, scaffold once | orchestrator, `localagent-scaffold` |
-| Build, per unit | pending -> specced | `localagent-spec-architect` |
-| | specced -> implemented | `localagent-implementer` |
-| | implemented -> done | `localagent-reviewer` |
-| Finalize | one e2e flow where a surface exists, then the docs | `localagent-e2e`, `localagent-docs` |
+| Build, per unit | pending -> done: `spec.md`, one test per criterion, the code, the test run | `localagent-worker` |
+| Finalize | one e2e flow where the plan names a surface, then the docs | `localagent-e2e`, `localagent-docs` |
 
 The orchestrator is the session itself: pure control flow, `PLAN.md` and `STATE.md` its only
 writes, `dispatch` its only way to get anything built. `STATE.md` is the ledger a context reset
-must be survivable from.
+must be survivable from. The gate after a unit is the harness's: `dispatch` runs the test command
+and lists the changed files in the status line it returns.
+
+Until the Tron run this was three agents per unit - spec-architect, implementer, reviewer - and
+before T-018 four, with a wall between test-author and implementer. Each cut is measured below.
 
 ## Running it on pi
 
@@ -82,6 +84,20 @@ the `dispatch` tool, the rest the orchestrator prompt and the skill entry - the 
   (`--append-system-prompt`), since the base prompt explains the tools to a small model.
 - Dispatches are queued, one at a time: the server has one slot (`--parallel 1`), and the
   workflow requires the sequential shape anyway.
+- **Agents run on a second `models.json` entry, `<MODEL_ALIAS>-agent`**, the same server with
+  `samplingParams` that send `reasoning_budget_tokens` = `AGENT_BUDGET` (4096) and their own
+  budget message per request; the fork's server reads both from the body and falls back to its
+  flags. The orchestrator keeps `BUDGET`. Why: inside a dispatched child no user message follows
+  the brief, so the template keeps every earlier turn's thinking in the prompt (the
+  `preserve_thinking` switch only drops thinking *before* the last user message, see
+  [dev.md](dev.md#thinking-in-the-prompt)). At 8192 a child crossed pi's 48k compaction trigger
+  in five or six turns, every time - the Tron numbers below.
+- **A dispatch is cut off after `AGENT_MAX_TURNS` (15)** and comes back as a `BLOCKED` tool
+  error naming the log. The prompts' own "two attempts, then escalate" rule was never once
+  followed: the Tron U2 implementer ran 332 turns.
+- **After a `DONE`, `dispatch` runs the test command** the orchestrator passed as `test` and
+  appends `· tests: green|RED (exit N): <tail>` and `· changed: <git status files>`. The
+  orchestrator used to spend eight or nine turns on that gate, inventing checks as it went.
 - The result is the agent's status line (`DONE`, `FIXES_REQUIRED`, `ESCALATE`, `BLOCKED`,
   `PASS`, `NO_SURFACE`), the last one in its final message, so a chatty reply does not fill the
   orchestrator's window. **Only that line comes back**, which is why an agent with something to
@@ -112,8 +128,9 @@ system prompt, the child has no `dispatch` and no `AGENTS.md`, and the orchestra
 
 Two runs of the **same prompt** (a todo CLI: add/list/complete/remove over a JSON file, clear
 failures with a non-zero exit) on the same profile (`dedicated`, CTX 64000, BUDGET 8192), one
-before the rebuild and one after. Scripts and artifacts: `runs/T-013-localagent-cli/` and
-`runs/T-018-workflow-without-tdd/` (gitignored, kept), `report.sh` beside each.
+before the rebuild and one after, then the study's Tron prompt in the T-018 shape. Scripts and
+artifacts: `runs/T-013-localagent-cli/`, `runs/T-018-workflow-without-tdd/` and
+`runs/T-013-localagent-tron/` (gitignored, kept), `report.sh` beside each.
 
 | | T-018, spec -> implement -> review | T-013, TDD behind a wall |
 | --- | --- | --- |
@@ -157,42 +174,84 @@ produced a 317-line driver with 88 checks against a one-flow rule. Both calls ar
 the skill, so that 17 minutes may come back on another run. The structural savings are the
 spec-architect (stubs gone) and the orchestrator (half the sub-steps, half the turns).
 
+### The Tron run: where the three-agent shape stops
+
+The study's prompt (an online two-player Tron game, browser client, relay server), same profile,
+the T-018 shape plus the first T-019 commits, 2026-09-21/22. **Aborted after about five hours
+with one of three units done.** What the session logs say, orchestrator and children:
+
+```
+                              minutes   turns   compactions
+scaffold, first attempt          19       37        0   killed: fought node --test, then wrote product code
+scaffold, second attempt         11       28        0
+U1 spec-architect                49       20        2   spec on disk after 24 min; then 25 min of wc -l and rewrites; killed
+U1 implementer                   27       21        1
+U1 reviewer                      32        -        -   DONE, 8 of 8 met: no finding, as in T-018
+U2 spec-architect                17       16        0
+U2 implementer                  235      332       12   aborted; never escalated
+orchestrator, between            28       34        0   17 turns on the two gate checks alone
+```
+
+Three mechanisms, each visible in the logs:
+
+- **Thinking accumulates inside a child and compacts it.** Base context 3k, plus up to 8k of
+  thinking per turn, trigger at 48k: the U1 spec-architect compacted two minutes after writing
+  its file, the U2 implementer every fifteen minutes, its summaries growing to 19k characters and
+  becoming the context. After a compaction the agent no longer knows it is done: the second U1
+  summary says "task complete", and the agent reads the file again to trim five lines.
+- **Rules with numbers are checked with turns.** "~80 lines" became `wc -l` five times through
+  two compactions. "Two attempts, then escalate" was never followed in 332 turns. Prompt-only
+  bounds do not bound this model.
+- **The orchestrator restates and invents.** Its briefs (600-1000 tokens each) told the
+  implementer to write tests, against that agent's prompt, so the unit got 209 lines of author
+  tests and then 191 lines of reviewer tests for the same eight criteria. After each `DONE` it
+  ran eight or nine turns of checks the skill did not ask for: I/O scans, test counts, commit
+  juggling.
+
+The reviewer, across every run, has now reviewed three units and found nothing, at 18, 32 and 32
+minutes. That was the T-019 stop condition: "if the reviewer waves a real defect through, the
+split buys nothing". It never got a defect to wave through, and it cost a third of every unit.
+
 ## The pieces, and what each one is answering
 
-- **`spec.md` in prose, no stub files.** Stubs existed only to make two blind halves agree on a
-  signature, at 7-10 minutes per unit. Without a wall, a later unit's implementer just reads the
-  earlier unit's real code. The spec caps at ~80 lines, six-ish numbered acceptance criteria; each
-  criterion becomes a test *and* a piece of implementation, so an inflated list inflates two agents.
-- **The implementer runs what it built** before returning - not "it compiles", but the command, the
-  route, the function. It is the only check in that step, since no tests exist yet. T-013's own
-  artifact shows the gap: `python3 todo.py` did nothing, because the module had no `__main__`
-  block. Contract-compliant, never executed.
-- **The reviewer writes the tests from the criteria, before opening the production code.** Prompt
-  order is the only lever here: tests written from the code pin what exists instead of what was
-  asked for. It is verifiable afterwards in the child's session log, and in T-018 both reviewers
-  held the order - spec, tests, run, *then* `todo.py`.
-- **The reviewer never edits production code.** Its own tests it may fix freely; code findings go
-  back to the implementer in one batch, one rework round, then escalate. Otherwise the checker is
-  also the author and nobody is checking. Only a violated acceptance criterion is a finding - this
-  model overproduces rather than rubber-stamps, and an invented finding costs a full round.
-- **Turn budgets on the cheap steps** (e2e 12, docs 8). In T-013 they were the two steps meant to
-  be cheapest and together cost 26 minutes; in T-018 docs took 3:26 for a README of 42 lines
-  instead of 9:13 for one of 122.
-- **Nothing is enforced any more.** `wall.ts`, the `permission.read` blocks and the brief-path
-  allowlist are deleted; what remains is prompt plus the orchestrator's own `git diff` and test run
-  after each unit.
+- **One worker per unit: spec, then tests from its criteria, then code.** The three-agent split
+  bought one thing, tests that say what was asked for instead of what was built, and the Tron run
+  priced it at two extra dispatches per unit for a reviewer that has never found anything. The
+  order survives inside one context: the worker writes `spec.md` (interface in prose, three to
+  five criteria), then a test per criterion, then the code. T-018 had already found that the spec
+  was the reliable artifact, not the blindness; T-013 had shown what a wall costs when the blind
+  test is wrong (46 minutes, a third of the run).
+- **`spec.md` in prose, no stub files, no line count.** Stubs existed only to make two blind
+  halves agree on a signature, at 7-10 minutes per unit. The "~80 lines" cap cost the Tron
+  spec-architect 25 minutes of `wc -l`; the template now says the spec is measured in what it
+  says, and no prompt in the workflow carries a number the model could check with a tool.
+- **The gate is the harness.** `dispatch` runs the tests after a `DONE` and lists the changed
+  files. The orchestrator's version of that gate was 17 turns per unit in the Tron run.
+- **The turn limit is the escalation rule.** Fifteen turns per dispatch, enforced by the
+  extension. A unit that does not fit is re-cut in the plan, which is the one correction that is
+  cheaper than any rework.
+- **Units are one file and three to five criteria** because a dispatch is fifteen turns. The
+  Tron plan had three units for a game; the same plan is eight or nine.
+- **Agents think with 4096, the orchestrator with 8192.** The child's context is the brief plus
+  its own thinking, and at 8192 the thinking alone filled the window in five turns.
+- **Briefs are facts, not rules.** Working directory, commands, the plan entry and interface
+  lines inline, paths. The prompts hold the rules; a brief that restates them is where the Tron
+  orchestrator started inventing its own.
+- **Turn budgets on the cheap steps** (e2e 12, docs 8) stay in the prompts as guidance; the
+  extension's limit is what actually stops them.
+- **Nothing is enforced *in the prompts*.** `wall.ts`, the `permission.read` blocks and the
+  brief-path allowlist are gone since T-018. What is enforced now is enforced by the extension:
+  the turn limit, the agent budget, the test run. Those are checks the skill demanded anyway,
+  moved from the model into code because the model did not hold them.
 
-## What T-018 did not prove
+## What is not shown yet
 
-- **The findings path never ran.** Both units came back clean, so the reviewer returned `DONE`
-  twice and the rework round was never exercised. The reviews themselves are substantive - U1
-  flags that `save(path, tasks=None)` would silently persist `[]`, U2 argues about argparse's
-  two-line stderr - but "does it find a real defect" is still open.
-- **The implementer's self-verification is the new cost centre**: 32:20 and 36 turns for U2 alone,
-  a third of the run.
-- **The orchestrator still spends ~20 minutes between dispatches** on its ledger, including a final
-  smoke test of its own and a fairly literary run log.
-- Small breach worth watching: the U2 implementer ran `git diff` against the parent repo although
-  the prompt told it to ignore it. One turn, but nothing stops that sort of thing but the prompt.
+- **Everything above the Tron section describes a shape that has not run.** The next
+  measurement is the todo CLI again, against T-018's 124 turns and 1:40; the plan for it is in
+  [T-019](../backlog/T-019-workflow-cost.md).
+- **Whether a worker holds the order** spec -> tests -> code inside one context. It is
+  verifiable in the child's session log, as the reviewer's order was in T-018.
+- **Whether 4096 is enough** for the implementing half of a unit. 2048 was the first proposal;
+  the author judged it too tight for code. The measurement will say.
 
 Next round: [T-019](../backlog/T-019-workflow-cost.md).

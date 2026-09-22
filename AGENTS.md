@@ -30,7 +30,7 @@ incomplete, and a change that contradicts one needs a new measurement, not an ar
 | `bin/bonsai-pi` | Starts the pinned pi with `PI_CODING_AGENT_DIR` set to `PI_AGENT_DIR`, and starts/stops `bonsai-server` around it when none runs. State in `$BONSAI_HOME/run/`. Same sourcing as `bonsai-server` |
 | `pi/pi-agents.md` | Runtime artifact, copied to `$PI_AGENT_DIR/AGENTS.md`. **Not this file** |
 | `pi/extensions/localagent/` | pi extension behind `bonsai-pi --localagent`: the `dispatch` tool, and the session's `hasUI` for the plan gate |
-| `pi/localagent-workflow/` | The workflow it runs: skill, seven agent prompts, templates. The author's own, from the study in `docs/model-comparison.md`, with its setup and dispatch parts rewritten for pi |
+| `pi/localagent-workflow/` | The workflow it runs: skill, five agent prompts (orchestrator, scaffold, worker, e2e, docs), templates. Descended from the author's seven-agent workflow in `docs/model-comparison.md`; every cut since is measured in `docs/localagent.md` |
 
 ## Four things that bite
 

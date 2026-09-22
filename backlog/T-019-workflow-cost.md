@@ -1,6 +1,6 @@
 # T-019 — Cut what the localagent workflow still costs per unit
 
-- **Summary:** The rebuild works; now attack the three items the T-018 run left standing — the implementer's 32-minute self-verification, the orchestrator's 20 minutes of bookkeeping, and a reviewer whose findings path has never run
+- **Summary:** After the Tron run (five hours, one unit, aborted) the workflow is reshaped: one worker per unit, harness-run gate, 15-turn dispatch limit, 4096 agent budget. Measure the new shape on the todo CLI against T-018's 124 turns before anything larger
 - **Category:** spike
 - **Importance:** medium
 - **Effort:** M
@@ -37,131 +37,82 @@ single-process CLI to have no e2e surface; T-013's judged the opposite and got a
 Both are defensible under the skill as written, which means the run-to-run variance is larger than
 the next optimisation.
 
-## What
+## What happened in between: the Tron run
 
-Measure first, then change at most one thing per run — the comparison only holds while the prompt
-and the profile stay fixed. Branch `t019-workflow-cost` carries the prompt changes as **one commit
-each**, so a run can be pinned to any of them:
+Branch `t019-workflow-cost` at its first three commits, the study's Tron prompt, 2026-09-21/22.
+Aborted after about five hours with one of three units done. The per-agent numbers and the three
+mechanisms (thinking accumulating to a compaction inside every child, numeric rules checked with
+turns, an orchestrator restating and inventing rules) are in
+[`docs/localagent.md`](../docs/localagent.md#the-tron-run-where-the-three-agent-shape-stops).
+Logs: `runs/T-013-localagent-tron/`, orchestrator sessions and the `dispatch/` folder.
 
-| Commit | Change | Answers |
-| --- | --- | --- |
-| `509eae8` | the e2e surface is settled in `PLAN.md` at the gate and binds finalize; a CLI counts | the coin flip: no variance left in whether e2e runs |
-| `ab8a0b1` | `STATE.md` template gets a one-line run log; no re-read every round; no own smoke test | the orchestrator's 20 minutes |
-| `86ee00a` | the implementer verifies with one throwaway probe script; `git` is not its tool | the implementer's 32 minutes, and the `git diff` breach |
+Three of seven dispatches never returned. That is the finding that reshaped the workflow rather
+than tuning it: the three-agent split was costing two dispatches per unit for a reviewer that has
+found nothing in three units, and no prompt-only bound held.
 
-The reviewer prompt is untouched on purpose: the run below tests it as it is.
+## What is on the branch now
 
-### 1. The reviewer, alone, against a planted defect — first, before any turn counting
+| Where | Change |
+| --- | --- |
+| `config.env`, `bin/bonsai-pi`, `scripts/pi.sh` | `AGENT_BUDGET` 4096 and `AGENT_BUDGET_MSG` as a second `models.json` entry `<alias>-agent` with `samplingParams`; `AGENT_MAX_TURNS` 15. Both reach the extension through the environment |
+| `pi/extensions/localagent/index.ts` | children run on the agent model; a dispatch past the turn limit is killed and returned as `BLOCKED … turn budget`; after a `DONE` the tool runs the `test` command and appends `tests:` and `changed:` |
+| `pi/localagent-workflow/` | `localagent-worker` replaces spec-architect, implementer and reviewer; skill, orchestrator and templates follow: briefs carry facts only, the plan entry inline, units of one file and three to five criteria, no numeric rule anywhere in a prompt |
+| `docs/localagent.md` | the Tron numbers, the new shape and what it is answering, and the plain statement that it has not run yet |
 
-This is the run that decides whether the reviewer is a check or a ceremony, and it does not
-need the whole pipeline: the reviewer is one `pi -p` process with its prompt appended, exactly
-as `dispatch` starts it. So run it by hand against a copy of T-018's product with one criterion
-broken, ~10 minutes instead of 1:40. **Pick a defect the implementer's own run would not show
-but a criterion test does** — a wrong exit code on one error path, a message on stdout instead
-of stderr — otherwise the run measures the self-verification, not the reviewer.
+## What to run, in this order
 
-`runs/T-019-reviewer-findings/run.sh` (runs/ is gitignored, so it lives here until it exists
-there). `bonsai-server` must be up. Fill the four variables from T-018's `STATE.md`:
+The four changes are one shape; they are measured together. The comparison is against T-018's
+todo-CLI run (124 turns, 1:40, 164k output tokens) on the same profile.
 
-```bash
-#!/usr/bin/env bash
-# SPDX-License-Identifier: MIT
-# Runs one localagent agent by hand, the way dispatch starts it, against a copy of a finished
-# unit with one planted defect. STEP=review (default): plant, then the reviewer. STEP=rework:
-# the implementer on the review it wrote. Needs bonsai-server running and the pinned pi.
-set -euo pipefail
-ROOT=${ROOT:-$HOME/bonsai-local}            # this repo
-SRC=${SRC:?the repo T-018 built, with localagent/ and the product}
-UNIT=${UNIT:-U2}
-TEST_CMD=${TEST_CMD:-python3 -m unittest -v}
-CONSTRAINTS=${CONSTRAINTS:-Python 3, standard library only, no new dependencies}
-PLANT=${PLANT:?shell command that breaks exactly one criterion in the copy, e.g. "sed -i ... todo.py"}
-STEP=${STEP:-review}
-WORK=${WORK:-$PWD/work}
-OUT=$PWD                                    # logs and sessions stay out of the copy
-source "$ROOT/config.env"
-curl -sf -o /dev/null "$SERVER_URL/health" || { echo "no server at $SERVER_URL" >&2; exit 1; }
+1. **`./install.sh pi`** on the branch. Check `$BONSAI_HOME/pi-agent/models.json` has the
+   `bonsai-27b-agent` entry with `samplingParams`. Then, with `bonsai-server` up, one request
+   by hand to confirm the server accepts the other model name and the smaller budget:
 
-agents="$ROOT/pi/localagent-workflow/agents"
-prompt() { awk 'n>=2{print} /^---$/{n++}' "$agents/localagent-$1.md"; }   # body without frontmatter
-run() {  # run <agent> <brief> — same flags as the extension's dispatch
-  local log="$OUT/$1.$(date +%H%M%S).jsonl"
-  PI_CODING_AGENT_DIR="$PI_AGENT_DIR" "$PI_BIN" --mode json -p \
-    --no-extensions --no-skills --no-prompt-templates --no-context-files \
-    --session-dir "$OUT/sessions" --append-system-prompt "$(prompt "$1")" -- "$2" \
-    | tee "$log" >/dev/null
-  python3 - "$log" <<'EOF'
-import json, re, sys
-final = None; turns = 0
-for line in open(sys.argv[1]):
-    try: e = json.loads(line)
-    except ValueError: continue
-    if e.get("type") == "message_end" and e.get("message", {}).get("role") == "assistant":
-        final = e["message"]; turns += 1
-text = "\n".join(p["text"] for p in final["content"] if p.get("type") == "text") if final else ""
-lines = [l.strip("`* ") for l in text.splitlines() if l.strip()]
-status = next((l for l in reversed(lines) if re.match(r"(DONE|FIXES_REQUIRED|ESCALATE|BLOCKED)\b", l)), lines[-1] if lines else "")
-print(f"{turns} turns, stopReason {final.get('stopReason') if final else None}: {status}")
-EOF
-}
+   ```bash
+   curl -s "$SERVER_URL/v1/chat/completions" -H 'content-type: application/json' -d '{
+     "model":"bonsai-27b-agent","max_tokens":600,"reasoning_budget_tokens":64,
+     "reasoning_budget_message":"\n\nBudget. Answer now.\n",
+     "messages":[{"role":"user","content":"Think about it, then name three prime numbers."}]}' \
+     | python3 -c 'import json,sys; m=json.load(sys.stdin)["choices"][0]["message"]; print(len(m.get("reasoning_content","")), "reasoning chars |", m["content"][:200])'
+   ```
 
-case "$STEP" in
-  review)
-    rm -rf "$WORK"; cp -r "$SRC" "$WORK"; rm -rf "$WORK/.git" "$WORK/localagent/units/$UNIT/review.md"
-    (cd "$WORK" && eval "$PLANT" && git init -q && git add -A && git commit -qm "planted")
-    cd "$WORK"
-    run reviewer "Working directory: $WORK (absolute). Constraints: $CONSTRAINTS.
-Task: review unit $UNIT — write one test per acceptance criterion, run them, review the code.
-Inputs: $WORK/localagent/units/$UNIT/spec.md. Test command: $TEST_CMD"
-    echo "--- files the reviewer touched (production code here is a breach):"; git status --short
-    echo "--- review.md:"; cat "localagent/units/$UNIT/review.md" 2>/dev/null || echo "(none written)"
-    ;;
-  rework)
-    cd "$WORK"; git add -A; git commit -qm "reviewed" || true
-    run implementer "Working directory: $WORK (absolute). Constraints: $CONSTRAINTS.
-Task: rework unit $UNIT — fix exactly the criteria the review names, run what you built, return.
-Inputs: $WORK/localagent/units/$UNIT/spec.md, $WORK/localagent/units/$UNIT/review.md. Test command: $TEST_CMD"
-    echo "--- files the implementer touched (a test file here is a breach):"; git status --short
-    echo "--- the reviewer's tests after the rework:"; (eval "$TEST_CMD" && echo GREEN) || echo RED
-    ;;
-esac
-```
+   The reasoning should be a few hundred characters at most. If the server rejects the model
+   name, the agent entry needs the alias's name and the extension a different way to select it.
 
-Record: did the reviewer report the planted criterion, by number, and nothing else? Did it hold
-the spec-before-code order (its session JSONL shows the read order)? On `STEP=rework`: did the
-implementer fix only that, and do the reviewer's tests go green? The attempt counter is the
-orchestrator's and is not exercised here; it is covered by the full run below.
+2. **The turn limit and the gate, ten minutes each, without a full run.** A worker by hand,
+   the way `dispatch` starts it, in a scratch repo that already has a green test command:
 
-**If the reviewer waves the defect through, stop.** Record the workflow as unsuitable for this
-model in `docs/localagent.md` and close the ticket on that; the commits above then optimise a
-pipeline nobody should run.
+   ```bash
+   source config.env; W=$(pwd)/scratch; A=pi/localagent-workflow/agents
+   PI_CODING_AGENT_DIR="$PI_AGENT_DIR" "$PI_BIN" --mode json -p --model "local/$AGENT_MODEL_ID" \
+     --no-extensions --no-skills --no-prompt-templates --no-context-files --session-dir "$W/.s" \
+     --append-system-prompt "$(awk 'n>=2{print} /^---$/{n++}' $A/localagent-worker.md)" \
+     -- "Working directory: $W. Test command: npm test. Unit U1: a complete chess engine with
+   move generation, check, mate, castling, en passant and PGN export in one file. Builds on: none.
+   Spec template: $(pwd)/pi/localagent-workflow/templates/unit-spec.md" \
+     | grep -c '"type":"message_end"'
+   ```
 
-### 2. The full run, once per commit, same prompt and profile as T-013 and T-018
+   By hand there is no limit, so this measures how far a hopeless unit gets in fifteen turns and
+   whether the agent budget shows in the per-turn `usage.output`. The limit itself and the gate
+   are then one orchestrator session with the flag, watched: the first worker `DONE` must come
+   back with `· tests: … · changed: …`, and a unit re-briefed as the chess engine must come back
+   `BLOCKED … turn budget 15` naming the log.
 
-Then the turn count, against T-018's 124. Check out the branch at the commit to test, `./install.sh
-pi` (it copies the workflow), same todo-CLI prompt, `runs/T-019-{commit}/` with `report.sh`
-beside it. Three things to read off each:
+3. **The todo CLI**, same prompt and profile as T-018, `runs/T-019-cli/` with `report.sh`.
+   Read off: turns per dispatch, compactions inside children (target 0), orchestrator turns per
+   unit (target 2), wall clock (target under 60 minutes), and whether each worker held
+   spec -> tests -> code in its session log. A child that compacts at 4096 means the turn
+   limit is too high for that budget, not that the budget is too small.
 
-- **`509eae8`** — whether e2e ran, and what it cost with the 12-turn budget. This is the one
-  commit that may make the run *longer*; the number it buys is the variance it removes.
-- **`ab8a0b1`** — the orchestrator's minutes between dispatches, and whether the run log stayed
-  one line per step. Also whether the orchestrator survived without the per-round re-read: a
-  wrong status pick after a compaction is the failure to watch.
-- **`86ee00a`** — the implementer's turns, split into build and verification from its session
-  log: tool calls between the last write of a product file and `DONE`. If the split shows the
-  build was the cost, the probe rule bought little and the next lever is the spec's size.
-
-### 3. Still open after the runs
-
-- [`T-030`](T-030-dispatch-runs-the-gate.md) holds the structural lever: the orchestrator's
-  test run and diff check done by `dispatch` itself. Decided after these numbers, not before.
-- Per-agent thinking budget is a guess, not a lever, until someone checks whether the pinned
-  `llama-server` honours `reasoning_effort` per request. If it does, docs and scaffold could run
-  with less than 8192 without touching the profile.
+4. **Only then Tron**, with the plan cut to eight or nine units and two stop conditions set
+   before the start: a second `BLOCKED` on the same unit after a re-cut ends the run, and a
+   wall clock of three hours ends it too. Past either, the result is the number, not the game.
 
 ## Verify
 
-Same prompt, same profile (`dedicated`, CTX 64000, BUDGET 8192), `runs/` next to the other two,
-`report.sh` for the numbers. Targets: under 124 turns without losing the clean result, and a
-reviewer that reports the planted defect. If it does not report it, record the workflow as
-unsuitable for this model in `docs/localagent.md` rather than tuning further.
+Same profile (`dedicated`, CTX 64000, BUDGET 8192, AGENT_BUDGET 4096), `runs/` next to the
+others, `report.sh` for the numbers. Targets for the CLI: under 124 turns and under 1:40 with
+the same clean result, no compaction in any child. If a worker does not hold the spec-first
+order, or the CLI does not finish inside the turn limits, record it in `docs/localagent.md`
+as the shape's limit rather than tuning further.
