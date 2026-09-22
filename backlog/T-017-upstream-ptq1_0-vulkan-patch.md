@@ -1,6 +1,6 @@
-# T-017 — Upstream the PTQ1_0 Vulkan decode to the fork
+# T-017 — Hand the PTQ1_0 Vulkan decode to the fork's issue #185
 
-- **Summary:** Open the PR against PrismML-Eng/llama.cpp issue #185 with the T-016 patch, follow it through review, and drop `patches/vulkan/` once a pinned commit carries it
+- **Summary:** Post the T-016 result and patch link as a comment on PrismML-Eng/llama.cpp#185, and drop `patches/vulkan/` once a pinned commit carries an equivalent decode, from whoever lands it
 - **Category:** chore
 - **Importance:** medium
 - **Effort:** S
@@ -9,27 +9,30 @@
 ## Why
 
 T-016 rewrote the fork's PTQ1_0 Vulkan decode: 633 → 143 ms/token generation and 3.8 → 54 tok/s
-prompt on an RX 570, bit-exact against the CPU backend. The fork's own issue
-[#185](https://github.com/PrismML-Eng/llama.cpp/issues/185) has this kernel as committed-untested
-and slow, open, no patch - so the result has a home there, and every Vulkan user of the fork gets
-it. Until then this repo carries it in `patches/vulkan/`, applied by `build`, which is a second
-thing to keep in step with `LLAMA_COMMIT`.
+prompt on an RX 570, bit-exact against the CPU backend. Issue
+[#185](https://github.com/PrismML-Eng/llama.cpp/issues/185) is where that belongs.
+
+**Decided 2026-09-21: a comment, not a PR.** Two PRs were already open on 2026-09-18:
+[#188](https://github.com/PrismML-Eng/llama.cpp/pull/188) (integer-dot mat-vec kernel, mergeable,
+does not run on cards without `VK_KHR_shader_integer_dot_product` such as gfx803) and
+[#187](https://github.com/PrismML-Eng/llama.cpp/pull/187) (same table idea in a weaker form, ~1.2x
+on the generic path per the BC-250 numbers in #188, bundled into a conflicting +23k-line PR).
+The fork's `CONTRIBUTING.md` closes duplicates and requires the author to explain and maintain
+every line without AI help; the patch was written with Claude and that bar is not met. A
+comment hands the measurement and the patch to the people who can, at no cost.
 
 ## What
 
-1. Fork PrismML-Eng/llama.cpp on GitHub, `git am` the patch onto a branch off `1a07bfa` (the
-   pinned commit), push. This is a manual step: the machine that built the patch and the machine
-   with a GitHub login are not the same one here.
-2. Open the PR with the text in `runs/T-016-ptq1_0-vulkan-decode/upstream-pr.md`: what was
-   wrong, what changed, the `test-backend-ops` verification, the before/after table, what is
-   left (a dedicated mat-vec kernel that keeps all five trits of a loaded word).
-3. Answer review. Likely asks: numbers on a second card (the reporter of #185 has a 9070 XT
-   and a 860M), whether the const table should be shared memory on NVIDIA too (it follows
-   the IQ grids, so yes by precedent).
-4. When merged: move `LLAMA_COMMIT` to a commit that carries it, re-run the CUDA build and
-   the RX 570 measurement (`runs/T-016-ptq1_0-vulkan-decode/measure.sh`), delete
-   `patches/vulkan/`, and drop the patch mentions from `README.md`, `AGENTS.md` and
-   `docs/dev.md#other-gpu-backends`.
+1. **Done 2026-09-21:** posted as https://github.com/PrismML-Eng/llama.cpp/issues/185#issuecomment-5759986235 (text in `runs/T-016-ptq1_0-vulkan-decode/issue-185-comment.md`,
+   under `voxlo-dev`). The patch link points at
+   `main` of the public repo, so the file must stay at that path.
+2. Watch #185, #187, #188 occasionally. Answer questions with measurements, not code.
+3. When a pinned commit carries a decode that makes the patch unnecessary (from any of the
+   three): move `LLAMA_COMMIT`, re-run the CUDA build and the RX 570 measurement
+   (`runs/T-016-ptq1_0-vulkan-decode/measure.sh`), delete `patches/vulkan/`, and drop the patch
+   mentions from `README.md`, `AGENTS.md` and `docs/dev.md#other-gpu-backends`. If the new
+   decode is slower than 143 ms/token on the RX 570, keep the patch and rebase it instead.
 
-Not in scope: the dedicated PTQ1_0 mat-vec kernel (ceiling ~22 tok/s on the RX 570). Own
-ticket if the batch use case wants more than 7 tok/s.
+Not in scope: the dedicated PTQ1_0 mat-vec kernel (ceiling ~22 tok/s on the RX 570).
+`upstream-pr-body.md` and `upstream-commands.sh` in the run folder are the PR path, kept in
+case the decision is revisited.

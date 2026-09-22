@@ -4,7 +4,7 @@
 - **Category:** chore
 - **Importance:** high
 - **Effort:** S
-- **Depends on:** T-017 opened (not merged). License and history audit are closed
+- **Depends on:** T-017 comment posted on #185. License and history audit are closed
 
 ## Why
 
