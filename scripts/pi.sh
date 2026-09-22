@@ -25,7 +25,8 @@ mkdir -p "$dir"
 log "writing pi config in $dir"
 
 DIR="$dir" SERVER_URL="$SERVER_URL" ALIAS="$MODEL_ALIAS" CTX="$CTX" MAX_TOKENS="$MAX_TOKENS" \
-RESERVE_TOKENS="$RESERVE_TOKENS" KEEP_RECENT_TOKENS="$KEEP_RECENT_TOKENS" python3 - <<'PY'
+RESERVE_TOKENS="$RESERVE_TOKENS" KEEP_RECENT_TOKENS="$KEEP_RECENT_TOKENS" \
+AGENT_ID="$AGENT_MODEL_ID" AGENT_BUDGET="$AGENT_BUDGET" AGENT_BUDGET_MSG="$AGENT_BUDGET_MSG" python3 - <<'PY'
 import json, os
 d = os.environ["DIR"]
 
@@ -45,11 +46,25 @@ models.setdefault("providers", {})["local"] = {
     "api": "openai-completions",
     "baseUrl": os.environ["SERVER_URL"] + "/v1",
     "apiKey": "none",
-    "models": [{
-        "id": os.environ["ALIAS"],
-        "contextWindow": int(os.environ["CTX"]),
-        "maxTokens": int(os.environ["MAX_TOKENS"]),
-    }],
+    "models": [
+        {
+            "id": os.environ["ALIAS"],
+            "contextWindow": int(os.environ["CTX"]),
+            "maxTokens": int(os.environ["MAX_TOKENS"]),
+        },
+        # The same server, a smaller thinking budget: what the localagent extension starts its
+        # agents on. samplingParams go into the request body as-is; the fork's llama-server reads
+        # reasoning_budget_tokens and reasoning_budget_message per request. See config.env.
+        {
+            "id": os.environ["AGENT_ID"],
+            "contextWindow": int(os.environ["CTX"]),
+            "maxTokens": int(os.environ["MAX_TOKENS"]),
+            "samplingParams": {
+                "reasoning_budget_tokens": int(os.environ["AGENT_BUDGET"]),
+                "reasoning_budget_message": os.environ["AGENT_BUDGET_MSG"],
+            },
+        },
+    ],
 }
 save("models.json", models)
 
