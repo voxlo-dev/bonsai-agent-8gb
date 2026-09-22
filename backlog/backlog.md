@@ -7,7 +7,7 @@ Numbers have gaps: a closed ticket's file is deleted, and a ticket that is nobod
 is named `T-NNN-{slug}.local.md`, which `.gitignore` keeps out of the repo. The counter below never
 reuses a number either way.
 
-**Next ticket: `T-031`**
+**Next ticket: `T-032`**
 
 ## Draft
 
@@ -23,6 +23,7 @@ reuses a number either way.
 - [`T-017`](T-017-upstream-ptq1_0-vulkan-patch.md) Hand the PTQ1_0 Vulkan decode to the fork’s #185 — a comment with the measurement and the patch link, not a PR (two PRs were ahead, and the fork’s rules need an author who can defend every line); drop `patches/vulkan/` once a pin carries an equivalent · chore · medium · S
 - [`T-019`](T-019-workflow-cost.md) Cut what the localagent workflow still costs per unit — implementer self-verification, orchestrator bookkeeping, and a reviewer whose findings path has never run · spike · medium · M
 - [`T-030`](T-030-dispatch-runs-the-gate.md) Let `dispatch` run the orchestrator's two shell checks — test run and diff by the extension, the model keeps the decision · decision · medium · S
+- [`T-031`](T-031-sharp-chat-template.md) Measure the Qwen Sharp chat template — one plain session with `--chat-template-file`, thinking per turn and turns to result; expectation small, the delta is one terseness block · spike · low · S
 
 ## Open source (release checklist)
 
