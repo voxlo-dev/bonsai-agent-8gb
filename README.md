@@ -112,6 +112,11 @@ cd bonsai-agent-8gb && ./install.sh
 
 AMD cards under WSL2 are untested. Use native Linux for the Vulkan backend.
 
+There is no native Windows install and there will not be one: the reference machine for the
+CUDA numbers is WSL2, and a second PowerShell implementation of the install and the server
+lifecycle is not maintainable next to it. The reasoning is in
+[`docs/dev.md#windows`](docs/dev.md#windows).
+
 ## Use
 
 ```bash

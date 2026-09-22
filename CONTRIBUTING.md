@@ -75,6 +75,10 @@ you checked.
 - Changing one of `CTX`, `BUDGET`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS` on its
   own. They constrain each other arithmetically and move together, in a profile.
 - Support for ROCm, Metal or CPU-only inference. Two backends is what one person can keep measured.
+- A native Windows port. WSL2 is the Windows path and the reference platform for every CUDA
+  number here; a PowerShell second implementation of the install and of the server lifecycle is
+  more than one person can keep measured. The reasoning is in
+  [`docs/dev.md#windows`](docs/dev.md#windows).
 - Installing anything into `~/.pi` or as a global npm package.
 
 ## Code of conduct

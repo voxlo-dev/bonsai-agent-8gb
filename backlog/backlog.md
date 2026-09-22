@@ -7,7 +7,7 @@ Numbers have gaps: a closed ticket's file is deleted, and a ticket that is nobod
 is named `T-NNN-{slug}.local.md`, which `.gitignore` keeps out of the repo. The counter below never
 reuses a number either way.
 
-**Next ticket: `T-032`**
+**Next ticket: `T-033`**
 
 ## Draft
 
@@ -24,6 +24,7 @@ reuses a number either way.
 - [`T-019`](T-019-workflow-cost.md) Cut what the localagent workflow still costs per unit — implementer self-verification, orchestrator bookkeeping, and a reviewer whose findings path has never run · spike · medium · M
 - [`T-030`](T-030-dispatch-runs-the-gate.md) Let `dispatch` run the orchestrator's two shell checks — test run and diff by the extension, the model keeps the decision · decision · medium · S
 - [`T-031`](T-031-sharp-chat-template.md) Measure the Qwen Sharp chat template — one plain session with `--chat-template-file`, thinking per turn and turns to result; expectation small, the delta is one terseness block · spike · low · S
+- [`T-032`](T-032-docker-server-image.md) A Dockerfile for the server, not for pi — `llama-server` in a container, pi stays on the host through `SERVER_HOST`; answers the apt-toolchain problem (T-005) and nothing about drivers, VRAM or the profile · feature · medium · M
 
 ## Open source (release checklist)
 

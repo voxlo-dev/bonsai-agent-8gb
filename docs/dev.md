@@ -58,6 +58,40 @@ CUDA toolkit with its dependencies ~5.4 GB. The binary links `libcudart` and `li
 dynamically, so the toolkit stays after the build. pi needs Node.js >= 22.19 (`engines` in its
 `package.json`) and takes 440 MB in `$BONSAI_HOME/pi`.
 
+## Windows
+
+**Native Windows is declined; WSL2 is the Windows path**, and it is the reference platform - every
+CUDA number in this file was measured on Windows 11 + WSL2 + Ubuntu 26.04. So the question is not
+whether Windows works, it is whether a second implementation would be worth keeping.
+
+It would be a second implementation. The install is bash end to end, and the parts that would have
+to be rewritten are the parts that are hard:
+
+- **`deps` has no equivalent.** It is apt and dpkg. On Windows the toolchain is VS Build Tools plus
+  the CUDA toolkit, or the LunarG SDK for `glslc` - installed by hand, or by taking a dependency on
+  winget or chocolatey.
+- **`preflight` would be written twice.** It reads `/proc/meminfo`, `/proc/version`,
+  `/etc/os-release`, `/dev/dri/renderD*`, `df -P -BM` and `nproc`. Its first check already says
+  "this is not Linux - under Windows use WSL2", which is the correct answer.
+- **`build` picks gcc-13 as the CUDA host compiler** ([Toolchain](#toolchain)); under MSVC that
+  branch, and the ccache launchers with it, mean something else.
+- **`model` symlinks out of the Hugging Face cache**, which needs developer mode or an
+  administrator.
+- **`bonsai-pi` is the real cost.** `setsid`, `flock`, `kill -0`, pruning sessions by pid, and the
+  HUP/TERM/QUIT traps that make [Server lifecycle](#server-lifecycle) work have no Windows
+  counterpart. It would be reinvented with job objects and a mutex - the one piece of this repo
+  where the failure modes were expensive to find, rebuilt on a platform where they would have to be
+  found again.
+
+Git Bash or MSYS2 is not the shortcut it looks like: `nvidia-smi` and cmake run there, `/proc`,
+`flock` and `setsid` do not.
+
+Against roughly 700 lines of PowerShell, a second test matrix and a second set of measurements,
+the gain is that a Windows user does not run `wsl --install`. The one argument with substance is
+speed - native would not pay the WSL2 passthrough - and it is unmeasured; the host-side comparison
+in [Performance](performance.md#what-is-left) found nothing that puts 36 tok/s in question. If a
+measurement ever shows a real gap, this is the entry it reopens.
+
 ## Other GPU backends
 
 CUDA is a choice here, not a constraint of the model: the fork carries `PTQ1_0` kernels for
