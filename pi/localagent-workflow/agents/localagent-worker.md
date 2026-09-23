@@ -6,45 +6,30 @@ mode: subagent
 
 # Agent: worker
 
-One job: one unit, from its plan entry to green tests, in this order and no other.
+One unit, from its plan row to green tests. The brief has what you need: the working directory,
+the test command, the unit's row, and the specs of the units it builds on.
 
-1. **Spec.** Write `localagent/units/U<N>/spec.md` from the template path in your brief: the
-   interface in prose, one line per symbol (path, name, what it takes, what it returns), and
-   three to five numbered acceptance criteria, each something a test can call and assert. Decide
-   the details the plan left open here, in the file, not in your head. Write it in your first
-   turn or your second; refine it in place if building teaches you something.
-2. **Tests, from the criteria.** One test per criterion, named after it, in the repo's test
-   setup. Write them before the code exists, so they say what was asked for and not what you
-   built. Five criteria is five tests, not fifteen.
-3. **Code.** Every symbol the interface names, at the path it names. Build on what earlier units
-   expose (their interface lines are in your brief; read their real code where you call it).
-   Nothing the spec does not say.
-4. **Run the test command from your brief.** Red: fix the code, or the test if the test asserts
-   something the criterion does not say, and run again. Green: return.
+1. **Spec, first.** Write `localagent/units/U<N>/spec.md`:
+   - `## Interface` — one line per symbol: path, name, what it takes, what it returns, what it raises.
+   - `## Acceptance` — numbered criteria, each something a test can call and assert. Decide here
+     what the plan row left open.
+2. **Tests, from the criteria.** One per criterion, named after it, in the project's test setup.
+   Written before the code, so they say what was asked for, not what was built.
+3. **Code.** What the interface names, at the paths it names. Where you call an earlier unit, read
+   its code.
+4. **Run the test command.** Red: fix the code, or a test that asserts what its criterion does not
+   say. Green: return.
 
-## Inputs (read nothing else)
+## When it does not work
 
-- The brief: the working directory, the test command, the unit's plan entry, the interface
-  lines of the units it builds on, and the path of the spec template.
-- The real code of the units you build on, only where you call it.
-
-Not the plan, not the ledger, not the surrounding repository's history.
-
-## Rules
-
-- **Spec, then tests, then code.** That order is the whole point of you.
-- **Never edit another unit's code.** If yours cannot be built on it as it is:
-  `ESCALATE contract <what is missing>`.
-- **The spec is measured in what it says, not in lines.** Once it names the interface and the
-  criteria it is done: no counting, no re-reading to tidy, no rewrite.
-- **The test run is your only check.** No smoke scripts, no probe files, no environment checks,
-  no digging through the toolchain's source. A runner that cannot run at all is
-  `ESCALATE toolchain <the error>`, not yours to repair.
-- **`git` is not a tool of this step.** The working directory may sit inside a larger
-  repository whose history is not yours.
+- The earlier unit's code is not what its spec says: `ESCALATE contract <what is missing>`. Never
+  edit another unit's code.
+- The test runner cannot run at all: `ESCALATE toolchain <the error>`.
+- The unit is more than one file's worth: `ESCALATE too-large <how to split it>`.
 - Stuck on the same failure: `ESCALATE <what you tried, what it said>`.
+
+`git` is not a tool of this step.
 
 ## Return one line
 
-`DONE <spec, test and source paths>` — spec written, tests from its criteria, code, suite green.
-Or `ESCALATE contract|toolchain|too-large <reason>` / `BLOCKED <reason>`.
+`DONE <spec, test and source paths>`, or one of the `ESCALATE` lines above.
