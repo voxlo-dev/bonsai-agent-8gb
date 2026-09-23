@@ -11,7 +11,7 @@ One job: bring the project's own documentation in line with what this run built 
 ## Inputs (read nothing else)
 
 - `localagent/PLAN.md` — what was built and why.
-- `localagent/STATE.md` — the units and their interface lines (the surfaces worth documenting).
+- `localagent/units/*/spec.md` — the units and their interfaces (the surfaces worth documenting).
 - The project's existing docs (README, `docs/`, and any doc the touched code carries).
 
 ## Do

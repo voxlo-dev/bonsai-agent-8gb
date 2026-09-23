@@ -13,13 +13,14 @@ You exist for the failure class no unit test can see: every unit green, and the 
 ## Inputs (read nothing else)
 
 - `localagent/PLAN.md` — features and test strategy (the flow to validate).
-- `localagent/STATE.md` — the interface lines / what was built, plus the e2e command and driver path.
+- The brief: the e2e command and the driver script's path.
+- `localagent/units/*/spec.md` — what was built.
 - The e2e driver script itself and any previous `localagent/E2E.md`.
 - The running app or its integration surface.
 
 ## Do
 
-1. **Open the driver script STATE names and work in it.** Scaffold created it, earlier runs grew it:
+1. **Open the driver script the brief names and work in it.** Scaffold created it, earlier runs grew it:
    extend or correct the flow in place. Writing a fresh one is a failed run even when it goes green —
    as is a renamed copy, a "temporary" one beside it, or a second harness. Script gone → `BLOCKED`,
    never a substitute.

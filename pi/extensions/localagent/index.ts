@@ -1,8 +1,9 @@
 // Runs the localagent workflow (./workflow, copied from pi/localagent-workflow) on pi.
-// `pi --localagent` makes the session its orchestrator: the workflow skill is offered, the
-// orchestrator prompt appended to the system prompt (with a line saying whether a human is
-// reachable, so the plan gate is not the model's guess), and the `dispatch` tool starts one
-// localagent-* agent as a separate `pi -p` process, one at a time. Without the flag it does nothing.
+// `pi --localagent` makes the session its orchestrator: the orchestrator prompt, which is the whole
+// protocol, is appended to the system prompt (with a line saying whether a human is reachable, so
+// the plan gate is not the model's guess), and the `dispatch` tool starts one localagent-* agent as
+// a separate `pi -p` process, one at a time, and appends its result to localagent/LOG.md, the run's
+// ledger. Without the flag it does nothing.
 // Two limits come from the environment, set by bin/bonsai-pi from config.env: LOCALAGENT_AGENT_MODEL,
 // the models.json entry the agents run on (a smaller thinking budget than the orchestrator), and
 // LOCALAGENT_MAX_TURNS, a backstop after which a runaway dispatch is killed and reported as BLOCKED.
@@ -125,18 +126,15 @@ export default function (pi: ExtensionAPI) {
 			parameters: Type.Object({
 				agent: StringEnum(subagents as [string, ...string[]], { description: "Agent name" }),
 				brief: Type.String({ description: "Working directory, commands, task, input paths" }),
+				unit: Type.Optional(Type.String({ description: "The unit this dispatch works on, e.g. U2; named in the run log" })),
 				test: Type.Optional(Type.String({ description: "Test command to run in the working directory after a DONE" })),
 			}),
 			async execute(_id, params, signal, onUpdate, ctx) {
-				const run = queue.then(() => dispatch(params.agent, params.brief, params.test, signal, onUpdate, ctx));
+				const run = queue.then(() => dispatch(params.agent, params.brief, params.unit, params.test, signal, onUpdate, ctx));
 				queue = run.catch(() => {});
 				return run;
 			},
 		});
-	});
-
-	pi.on("resources_discover", async () => {
-		if (pi.getFlag("localagent")) return { skillPaths: [workflow] };
 	});
 
 	// The plan gate needs to know whether anyone can answer it; pi knows, the model does not.
@@ -145,11 +143,12 @@ export default function (pi: ExtensionAPI) {
 		if (!orchestrator) return;
 		const gate = ctx.hasUI
 			? "A human is at this session: the plan gate is binding. Show the plan and stop until it is approved."
-			: "No human is reachable (headless): record the plan gate as auto-approved in STATE.md and continue.";
-		return { systemPrompt: `${event.systemPrompt}\n\n${orchestrator.prompt}\n\n## Session\n\n${gate}` };
+			: "No human is reachable (headless): mark the plan auto-approved in PLAN.md and continue.";
+		const prompt = orchestrator.prompt.replaceAll("{{templates}}", path.join(workflow, "templates"));
+		return { systemPrompt: `${event.systemPrompt}\n\n${prompt}\n\n## Session\n\n${gate}` };
 	});
 
-	async function dispatch(name: string, brief: string, test: string | undefined, signal: AbortSignal | undefined, onUpdate: any, ctx: any) {
+	async function dispatch(name: string, brief: string, unit: string | undefined, test: string | undefined, signal: AbortSignal | undefined, onUpdate: any, ctx: any) {
 		const agent = agents.find((a) => a.name === name && !a.primary);
 		if (!agent) throw new Error(`BLOCKED unknown agent ${name}`);
 
@@ -255,8 +254,21 @@ export default function (pi: ExtensionAPI) {
 		if (test && /^(DONE|NO STATUS)\b/.test(line)) line += tests(ctx.cwd, test);
 		line += changes(ctx.cwd, before, /^(BLOCKED|ESCALATE)\b/.test(line));
 		line += ` · ${turns} turns, ${Math.round((Date.now() - started) / 60_000)} min`;
+		log(ctx.cwd, `${unit ? `${unit} ` : ""}${name}`, line);
 		if (error) throw new Error(line);
 		return { content: [{ type: "text", text: line }], details: { turns } };
+	}
+
+	// The run's ledger, written here so the orchestrator does not have to: keeping STATE.md by hand
+	// took 10 to 18 of its 34 turns in each T-019 and Tron session, five of them failed edits. It
+	// is what the orchestrator reads after a compaction. Only once the run has a localagent/ dir.
+	function log(cwd: string, who: string, line: string) {
+		const dir = path.join(cwd, "localagent");
+		if (!fs.existsSync(dir)) return;
+		const file = path.join(dir, "LOG.md");
+		const head = fs.existsSync(file) ? "" : "# Run log\n\nOne line per dispatch, appended by `dispatch`: the result as the orchestrator got it.\n\n";
+		const time = new Date().toTimeString().slice(0, 5);
+		fs.appendFileSync(file, `${head}- ${time} ${who} · ${line.replace(/\s*\n\s*/g, " ")}\n`);
 	}
 
 	// The objective gate after a DONE: the test command's verdict, a fact the orchestrator used to
