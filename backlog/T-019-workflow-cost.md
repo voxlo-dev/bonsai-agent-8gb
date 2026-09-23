@@ -302,9 +302,37 @@ and never reaches the step after it; built without running the tests and cut off
 limit, green, is `DONE` kept; the same with wrong code is `BLOCKED` reverted. Not verified: what
 a real model does with it.
 
-**Next:** the same prompt again, same profile, `runs/T-019-cli-2/work` (`report.sh` now only
-reads sessions after the work dir's `git init`). Measured against the solo run (0:33), not
-T-018.
+## Step 2, third attempt: the first clean run (2026-09-23)
+
+Branch at `1f9fa84`, same prompt, `runs/T-019-cli-2/work/`. **Finished with no `BLOCKED`**: plan,
+two units, e2e `PASS`, README. The result works: the tests pass, and an unknown command, a
+missing id and a corrupt store each fail with a clear message and exit 1.
+
+| Read off | this run | solo run | 2026-09-22 | target |
+| --- | --- | --- | --- | --- |
+| wall clock | 0:34:31, 2:46 of it at the plan gate | 0:33, ~4 min before a `Resume.` | 1:00 for U1-U2 | < 1:00 ✓ |
+| orchestrator turns | 20 | - | 35 for two units | < 20 (at the line) |
+| orchestrator turns on the ledger | 4 | - | 18 | only the plan ✓ |
+| `BLOCKED` | 0 | - | 3 | 0 ✓ |
+| dispatches | U1 8 turns, U2 13, e2e 13, docs 7 | - | | |
+| first write in a worker | turn 3, 2 | - | turn 4 to 7 | 1 or 2 (close) |
+| compactions in children | 0 | - | 0 | 0 ✓ |
+| turns / output tokens | 61 / 55k | 22 / 48k | 105 / 106k | |
+
+The plan cut the CLI into two units instead of five, and no scaffold ran (stdlib only). U2 is
+the first dispatch ended by the harness at green after red. **On this task the workflow now costs
+what working alone costs.** For about the same time and 15% more output it also leaves a spec
+per unit, an e2e check and a README.
+
+**Order: one worker of two did not hold it.** U1 wrote `spec.md` and `todo.py` in the same turn
+(3), then the tests (4). Its tests were never red, so the green-after-red gate had nothing to
+fire on. It ended itself after one unasked sanity-check turn. U2 held spec -> tests -> code.
+The gate depends on the order: a worker that writes code first is not cut short at green. Under
+this ticket's Verify rule, a broken order means the order goes back into the prompt in words. But
+the worker prompt already says "Written before the code". One of two is not a rate yet.
+
+**Next:** Tron (step 3), which is where the workflow either earns its cost or does not. Before
+that, possibly a second CLI run, to see whether the order slip repeats.
 
 ## Verify
 
