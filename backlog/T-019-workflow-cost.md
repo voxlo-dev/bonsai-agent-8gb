@@ -61,6 +61,8 @@ found nothing in three units, and no prompt-only bound held.
 
 ## What to run, in this order
 
+**Steps 1 to 3 ran on 2026-09-22; the results are below. Step 4 was not started.**
+
 The four changes are one shape; they are measured together. The comparison is against T-018's
 todo-CLI run (124 turns, 1:40, 164k output tokens) on the same profile.
 
@@ -69,7 +71,8 @@ todo-CLI run (124 turns, 1:40, 164k output tokens) on the same profile.
    by hand to confirm the server accepts the other model name and the smaller budget:
 
    ```bash
-   curl -s "$SERVER_URL/v1/chat/completions" -H 'content-type: application/json' -d '{
+   source config.env
+   curl -sS "$SERVER_URL/v1/chat/completions" -H 'content-type: application/json' -d '{
      "model":"bonsai-27b-agent","max_tokens":600,"reasoning_budget_tokens":64,
      "reasoning_budget_message":"\n\nBudget. Answer now.\n",
      "messages":[{"role":"user","content":"Think about it, then name three prime numbers."}]}' \
@@ -105,9 +108,70 @@ todo-CLI run (124 turns, 1:40, 164k output tokens) on the same profile.
    spec -> tests -> code in its session log. A child that compacts at 4096 means the turn
    limit is too high for that budget, not that the budget is too small.
 
-4. **Only then Tron**, with the plan cut to eight or nine units and two stop conditions set
-   before the start: a second `BLOCKED` on the same unit after a re-cut ends the run, and a
-   wall clock of three hours ends it too. Past either, the result is the number, not the game.
+4. **Only then Tron** *(not run — see the findings below)*, with the plan cut to eight or nine
+   units and two stop conditions set before the start: a second `BLOCKED` on the same unit after
+   a re-cut ends the run, and a wall clock of three hours ends it too. Past either, the result is
+   the number, not the game.
+
+## What the runs showed, 2026-09-22
+
+Steps 1 to 3 ran on `t019-workflow-cost` at `9b32420`, profile `dedicated`, `AGENT_BUDGET` 4096,
+`AGENT_MAX_TURNS` 15. Step 4 (Tron) was not started: the CLI run was stopped at an hour, because
+the three findings below are what it had to give. Logs: `runs/T-019-turn-limit/` (2a),
+`runs/T-019-gate/` (2b), `runs/T-019-cli/` with `report.sh` and `report.txt` (3).
+
+**1. The shape works. The agent model, the harness gate and the turn limit all do what they
+promise.** Step 1: the server takes `bonsai-27b-agent` and the smaller budget (277 reasoning
+characters at `reasoning_budget_tokens` 64). Step 2b: the plan gate held, the first worker came
+back `DONE … · tests: green · changed: …`, and the chess unit came back
+`BLOCKED … 15-turn budget … re-cut it` with its log path. The orchestrator went further than the
+test asked: it refused the oversized unit at the gate before dispatching it, re-cut it after the
+first `BLOCKED`, and stopped the run itself after the second rather than grinding. Every worker
+that reached code held spec → tests → code.
+
+**2. The turn limit does not cut where the cost is.** The CLI run, same prompt and profile as
+T-018:
+
+| | T-019 | T-018 | target |
+| --- | --- | --- | --- |
+| wall | 1:00 (stopped, U3 not started) | 1:40 | < 1:00 |
+| turns | 105 | 124 | < 124 |
+| orchestrator turns | 35 | | 2 per unit |
+| agent turns | 70 | | |
+| compactions in children | **0** | | 0 |
+| output tokens | 106k | 164k | |
+
+Six dispatches for what the plan cut into three units: `scaffold` 15 turns `BLOCKED` then 8 turns
+ok, U1 10 turns `DONE` green, U2 `BLOCKED` at 15, re-cut `BLOCKED` at 15, third attempt `DONE`.
+The limit did not catch units that were too large — U1 did the same kind of work in 10 turns. It
+caught a scaffold and a CLI router, work nobody would call oversized. Two of the three `BLOCKED`s
+cost a full 15-turn dispatch each to learn nothing.
+
+The 4096 budget is confirmed by 2a: a hopeless unit (chess engine, one file) ran its 15 turns and
+compacted once at turn 13, at 55k context — the worker rewrote the whole spec four times and the
+whole file four times, about 5k context per rewrite. At CLI-sized units no child compacted at all.
+So the ceiling is the file size a worker rewrites, not the turn count.
+
+**3. A blocked dispatch leaves its work on disk, and the next one inherits it.** The third U2
+dispatch returned `DONE · tests: green` after **3 turns and 34 seconds without writing a single
+file**: the two `BLOCKED` attempts had left working code behind, the harness ran the tests, they
+were green. The gate cannot tell "built it" from "found it". The same root cause makes `changed:`
+cumulative — nothing is committed between dispatches, so U1's line already listed the scaffold's
+files, and in 2b the orchestrator spent a turn wondering whether a worker had touched another
+unit's files. In 2b the orchestrator also read a leftover draft from the cut-off attempt and had
+to reason about whether it was allowed to keep it.
+
+Two smaller things, both in the logs: the orchestrator spends turns interpreting the skill's
+escalation table (whether a re-cut counts as an attempt), and the model sometimes writes its
+status line in Markdown bold, so a verdict arrives as `DONE**`.
+
+**What this leaves to decide** (T-030, and the reviewer question the branch was opened for): the
+turn limit per dispatch is the wrong knob if it fires on a scaffold; a blocked dispatch needs its
+tree reverted, or the gate needs to state what the dispatch itself changed.
+
+A note on the measurement, not the shape: the work dir needs its own `git init`, or the gate's
+`changed:` reports this repo's status, since `runs/` is gitignored. Both run scripts do it now;
+T-018's did not, so its `changed:` lines were never about its own work dir.
 
 ## Verify
 
