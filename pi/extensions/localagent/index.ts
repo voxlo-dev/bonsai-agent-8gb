@@ -5,11 +5,13 @@
 // localagent-* agent as a separate `pi -p` process, one at a time. Without the flag it does nothing.
 // Two limits come from the environment, set by bin/bonsai-pi from config.env: LOCALAGENT_AGENT_MODEL,
 // the models.json entry the agents run on (a smaller thinking budget than the orchestrator), and
-// LOCALAGENT_MAX_TURNS, a backstop after which a runaway dispatch is killed and reported as BLOCKED. After a DONE the
-// tool runs the unit's test command itself, so the gate is a fact in the result, not a model turn.
+// LOCALAGENT_MAX_TURNS, a backstop after which a runaway dispatch is killed and reported as BLOCKED.
+// After a DONE the tool runs the unit's test command itself, so the gate is a fact in the result,
+// not a model turn; it lists what the dispatch changed, and puts back what a failed one changed.
 // Rationale: docs/localagent.md.
 import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { StringEnum } from "@earendil-works/pi-ai";
@@ -60,10 +62,29 @@ function lastText(message: any): string {
 		.trim();
 }
 
-// The orchestrator gets the agent's status line; a model that talks on gets its last line.
+// The orchestrator gets the agent's status line, Markdown stripped (`**DONE**` arrived as `DONE**`).
+// A reply that names no status says so rather than passing its last line off as one.
 function statusLine(text: string): string {
-	const lines = text.split("\n").map((l) => l.replace(/^[`*\s]+|[`*\s]+$/g, "")).filter(Boolean);
-	return [...lines].reverse().find((l) => STATUS.test(l)) ?? lines.at(-1) ?? "";
+	const lines = text.split("\n").map((l) => l.replace(/[`*]/g, "").trim()).filter(Boolean);
+	const status = [...lines].reverse().find((l) => STATUS.test(l));
+	return status ?? (lines.length ? `NO STATUS: ${lines.slice(-3).join(" | ").slice(0, 300)}` : "");
+}
+
+// The work tree as a git tree object, written through a private copy of the index, so the user's
+// index, HEAD and history stay as they are (the blobs land in the object store, as `git stash`'s
+// would). Null outside a git work tree.
+function snapshot(cwd: string): string | null {
+	const real = spawnSync("git", ["rev-parse", "--git-path", "index"], { cwd, encoding: "utf8" });
+	if (real.status !== 0) return null;
+	const index = path.join(os.tmpdir(), `localagent-${process.pid}.index`);
+	const src = path.resolve(cwd, real.stdout.trim());
+	if (fs.existsSync(src)) fs.copyFileSync(src, index);
+	else fs.rmSync(index, { force: true });
+	const env = { ...process.env, GIT_INDEX_FILE: index };
+	const add = spawnSync("git", ["add", "-A", "--", "."], { cwd, env, encoding: "utf8" });
+	const tree = add.status === 0 ? spawnSync("git", ["write-tree"], { cwd, env, encoding: "utf8" }) : null;
+	fs.rmSync(index, { force: true });
+	return tree?.status === 0 ? tree.stdout.trim() : null;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -99,7 +120,7 @@ export default function (pi: ExtensionAPI) {
 				"The agent starts with an empty context: the brief must carry the absolute working directory, the " +
 				"commands, the task, and the paths of its inputs. Agents run one at a time; a runaway is cut off " +
 				`after ${MAX_TURNS} turns (BLOCKED). With \`test\`, the command runs after a DONE and its verdict is appended ` +
-				"to the result together with the files the agent changed.",
+				"to the result, then the files this dispatch changed; a BLOCKED or ESCALATE dispatch has its changes reverted.",
 			promptSnippet: "Run one localagent-* agent on a brief and return its status line",
 			parameters: Type.Object({
 				agent: StringEnum(subagents as [string, ...string[]], { description: "Agent name" }),
@@ -142,6 +163,8 @@ export default function (pi: ExtensionAPI) {
 		else args.push("--no-session");
 		args.push("--append-system-prompt", agent.prompt, "--", brief);
 
+		const before = snapshot(ctx.cwd);
+		const started = Date.now();
 		let turns = 0;
 		let final: any;
 		let stderr = "";
@@ -217,34 +240,51 @@ export default function (pi: ExtensionAPI) {
 		});
 
 		if (signal?.aborted) throw new Error(`BLOCKED ${name} aborted`);
-		if (cutOff) {
-			throw new Error(
-				`BLOCKED ${name} ran ${MAX_TURNS} turns without returning. Log: ${sessionDir || "(no session)"}`,
-			);
-		}
+		// A dispatch the harness ended is a tool error; one the agent ended is its status line.
 		const stop = final?.stopReason;
-		if (code !== 0 || !final || (stop && stop !== "stop")) {
+		let line: string;
+		let error = true;
+		if (cutOff) line = `BLOCKED ${name} ran ${MAX_TURNS} turns without returning. Log: ${sessionDir || "(no session)"}`;
+		else if (code !== 0 || !final || (stop && stop !== "stop")) {
 			const why = final?.errorMessage ?? (stop && stop !== "stop" ? `stopped on ${stop}` : stderr.trim().slice(-500) || `exit ${code}`);
-			throw new Error(`BLOCKED ${name} did not finish: ${why}`);
+			line = `BLOCKED ${name} did not finish: ${why}`;
+		} else {
+			line = statusLine(lastText(final)) || `BLOCKED ${name} returned no status line`;
+			error = false;
 		}
-		let line = statusLine(lastText(final)) || `BLOCKED ${name} returned no status line`;
-		if (/^DONE\b/.test(line)) line += gate(ctx.cwd, test);
+		if (test && /^(DONE|NO STATUS)\b/.test(line)) line += tests(ctx.cwd, test);
+		line += changes(ctx.cwd, before, /^(BLOCKED|ESCALATE)\b/.test(line));
+		line += ` · ${turns} turns, ${Math.round((Date.now() - started) / 60_000)} min`;
+		if (error) throw new Error(line);
 		return { content: [{ type: "text", text: line }], details: { turns } };
 	}
 
-	// The objective gate after a DONE: the test command's verdict and the files the agent changed.
-	// Both are facts the orchestrator used to spend eight turns establishing.
-	function gate(cwd: string, test: string | undefined): string {
-		let out = "";
-		if (test) {
-			const r = spawnSync("bash", ["-lc", test], { cwd, encoding: "utf8", timeout: 300_000 });
-			const tail = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
-			out += r.status === 0 ? " · tests: green" : ` · tests: RED (exit ${r.status ?? "timeout"}): ${tail}`;
-		}
-		const g = spawnSync("git", ["status", "--porcelain"], { cwd, encoding: "utf8" });
-		if (g.status === 0) {
-			const files = g.stdout.split("\n").filter(Boolean).map((l) => l.slice(3));
-			out += ` · changed: ${files.length ? files.slice(0, 20).join(" ") : "nothing"}${files.length > 20 ? " …" : ""}`;
+	// The objective gate after a DONE: the test command's verdict, a fact the orchestrator used to
+	// spend eight turns establishing.
+	function tests(cwd: string, test: string): string {
+		const r = spawnSync("bash", ["-lc", test], { cwd, encoding: "utf8", timeout: 300_000 });
+		const tail = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").slice(-3).join(" | ").slice(0, 300);
+		return r.status === 0 ? " · tests: green" : ` · tests: RED (exit ${r.status ?? "timeout"}): ${tail}`;
+	}
+
+	// What this dispatch changed, against the snapshot taken before it, so a later dispatch does not
+	// inherit the credit. A failed one is put back: in T-019 a third U2 attempt came back DONE green
+	// in 34 seconds without writing a file, on what two BLOCKED attempts had left on disk.
+	function changes(cwd: string, before: string | null, revert: boolean): string {
+		const after = before ? snapshot(cwd) : null;
+		if (!before || !after) return "";
+		const d = spawnSync("git", ["diff", "-z", "--name-status", "--no-renames", "--relative", before, after], { cwd, encoding: "utf8" });
+		if (d.status !== 0) return "";
+		const fields = d.stdout.split("\0").filter(Boolean);
+		const entries: [string, string][] = [];
+		for (let i = 0; i + 1 < fields.length; i += 2) entries.push([fields[i], fields[i + 1]]);
+		const files = entries.map(([, f]) => f);
+		let out = ` · changed: ${files.length ? files.slice(0, 20).join(" ") : "nothing"}${files.length > 20 ? " …" : ""}`;
+		if (revert && entries.length) {
+			for (const [s, f] of entries) if (s === "A") fs.rmSync(path.join(cwd, f), { force: true });
+			const back = entries.filter(([s]) => s !== "A").map(([, f]) => f);
+			const r = back.length ? spawnSync("git", ["restore", `--source=${before}`, "--worktree", "--", ...back], { cwd, encoding: "utf8" }) : null;
+			out += r && r.status !== 0 ? ` · revert failed: ${r.stderr.trim().slice(0, 200)}` : " · reverted";
 		}
 		return out;
 	}
