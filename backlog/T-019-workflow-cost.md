@@ -240,6 +240,72 @@ verified: anything a real model does with the shorter prompts.
    the start: a unit's second failure ends the run (the orchestrator's own rule now), and three
    hours of wall clock ends it too.
 
+## Step 2, first attempt: the orchestrator skipped the workflow (2026-09-23)
+
+Branch at `9f91a49`, T-018's prompt unchanged, `runs/T-019-cli-2/` (`work-solo/`,
+`report-solo.txt`). **No dispatch, no `PLAN.md`.** The orchestrator prompt reached the model, since
+its first reasoning quotes the plan gate. It then read "This is a test environment" as a
+benchmark, called the task small, and built it alone: `todo.py` plus a 31-check
+`test_todo.sh`, all green, in **0:33, 22 turns, 48k output tokens**. That wall clock includes about
+four minutes before a user `Resume.`. Nothing in the reasoning names a limit or a failure. It was a
+choice, and "You write `localagent/PLAN.md` and nothing else" did not stop it.
+
+Two things follow. **This is the baseline the workflow has to beat on this task**: the best
+workflow run so far (T-018, 1:40, 124 turns, 164k) cost three times the wall clock and turns for
+the same four commands. And the shorter orchestrator prompt no longer holds the session to its
+role. The 2026-09-22 run and T-018 both dispatched on the same user prompt, and so far this is one
+run, not a rate.
+
+The repeat adds one closing line to the prompt, "Use the localagent workflow for this task."
+(`prompt.txt`, the original kept as `prompt-solo.txt`). That makes it no longer T-018's prompt
+word for word. The alternative, a sentence in the orchestrator prompt saying no task is too small,
+was not taken: it would be the first rule added back after a reshape that took rules away.
+
+## Step 2, second attempt: the tests should decide, not the status line (2026-09-23)
+
+The prompt with the added line, `work-2/`, `report-2.txt` (its first orchestrator is the solo run,
+which shared the path). It was stopped after **49 minutes with two of five units**: scaffold 4
+turns, U1 `DONE` green in 18. The plan gate and the escalation rule both held: U2 was
+`BLOCKED` twice, re-cut in between, and the run stopped on the second failure. Neither `BLOCKED`
+was a unit too large:
+
+- **U2, first attempt:** 26 tests green at turn 26. The next four turns went to checks nobody
+  asked for: a subprocess probe, counting the criteria again, a `NOTES.md`. It had written no
+  status line when the 30-turn backstop cut it off, and the revert threw the finished unit away.
+  This is the third time: two of the 2026-09-22 `BLOCKED`s were green too. "Green: return." in
+  the worker prompt does not hold.
+- **U2, second attempt (re-cut to `add` only):** about 14 turns went on why unittest did not find
+  the new test file, whose class lacked `unittest.TestCase`. It still had one red test (chmod) at
+  turn 30.
+- Both attempts also lost turns to a plan error: `todo.py` next to the package `todo/`.
+
+**Change, in `dispatch`:** the test command decides whether a dispatch's work stays.
+
+- Whenever the agent runs a bash command containing the unit's test command, the child is paused
+  (SIGSTOP) and the harness runs the exact test command itself. A pipe, a subset or an exit code
+  does not decide. **A green run after a red one ends the dispatch as `DONE`**: the tests were
+  written before the code, so that is the worker's own "done", and the checks that follow it go
+  away. Without a red run first (a baseline check on the earlier units' tests) the dispatch goes
+  on.
+- A dispatch cut off at the backstop that changed something outside `localagent/` and whose tests
+  are green is `DONE`, kept. Only a red one is `BLOCKED` and reverted.
+
+How much of this depends on the stack: the verdict does not, since it is the plan's test command
+under `bash -lc`, as in the gate after a `DONE`. The trigger does. The agent's command must
+contain the test command as written (whitespace ignored). `npm test -- foo` matches `npm test`;
+`npx jest` or a bare `pytest` against `python3 -m pytest` does not. When the trigger misses, the
+dispatch ends the old way, with its status line or at the backstop, where the second rule still
+applies.
+
+Verified against a scripted stand-in endpoint in pi: red, then code, then green ends as `DONE`
+and never reaches the step after it; built without running the tests and cut off at a lowered
+limit, green, is `DONE` kept; the same with wrong code is `BLOCKED` reverted. Not verified: what
+a real model does with it.
+
+**Next:** the same prompt again, same profile, `runs/T-019-cli-2/work` (`report.sh` now only
+reads sessions after the work dir's `git init`). Measured against the solo run (0:33), not
+T-018.
+
 ## Verify
 
 Same profile (`dedicated`, CTX 64000, BUDGET 8192, AGENT_BUDGET 4096), `runs/` next to the
