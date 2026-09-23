@@ -130,7 +130,7 @@ bonsai-server        # terminal 1, ready at "listening on http://127.0.0.1:8080"
 bonsai-pi            # terminal 2
 ```
 
-For a larger feature, `bonsai-pi --localagent` runs the [localagent workflow](docs/localagent.md) (**experimental**, see its [status](docs/localagent.md#status)): pi plans with you, then after you approve the plan hands every step to a separate agent with its own small context — per unit a spec, the implementation, and a review that writes the tests from the spec's acceptance criteria — then e2e and docs. Type the task after it starts, or pass it as `bonsai-pi --localagent -- "task"`. The `--` matters: without it pi reads the task as the flag's value.
+`bonsai-pi --localagent` runs the [localagent workflow](docs/localagent.md) (**experimental and frozen**: it finishes a small feature, not a larger one, see its [status](docs/localagent.md#status)): pi plans with you, then after you approve the plan hands each unit to a separate agent with its own small context — spec, tests from its acceptance criteria, code — then e2e and docs. Type the task after it starts, or pass it as `bonsai-pi --localagent -- "task"`. The `--` matters: without it pi reads the task as the flag's value.
 
 It has carried one small feature end to end on the CUDA backend, in an earlier shape; the current shape (one worker per unit, turn-limited dispatches) is not measured yet. Large tasks and the Vulkan backend at 7 tok/s are not shown to work, and it may change without notice.
 
@@ -269,7 +269,7 @@ cannot, `PROFILE=display` drops the window to 48k to make room.
 | [docs/dev.md](docs/dev.md) | why every non-default choice is what it is, with its measurement, plus troubleshooting |
 | [docs/performance.md](docs/performance.md) | what limits generation speed, and what was tried and rejected |
 | [docs/model-comparison.md](docs/model-comparison.md) | eight local models as coding agents on 8 GB, measured before this repo existed |
-| [docs/localagent.md](docs/localagent.md) | the experimental multi-agent workflow |
+| [docs/localagent.md](docs/localagent.md) | the experimental multi-agent workflow, frozen |
 | [AGENTS.md](AGENTS.md) | where contributors and AI agents start |
 
 ## Contributing

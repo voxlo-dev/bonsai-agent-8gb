@@ -1,6 +1,7 @@
 # T-019 — Cut what the localagent workflow still costs per unit
 
-- **Summary:** Reshaped twice: after Tron (one worker per unit, harness gate, turn limit, 4096 agent budget), then after the first CLI run on that shape, whose session logs showed the limit cutting off finished work and the ledger eating half the orchestrator's turns (limit as a backstop, harness-written run log, per-dispatch revert, shorter prompts). Measure the second shape on the todo CLI, then Tron
+- **Summary:** **Frozen 2026-09-23**; the report is [at the end](#report-the-workflow-is-frozen-2026-09-23). Reshaped three times: after Tron (one worker per unit, harness gate, turn limit, 4096 agent budget), after the first CLI run (limit as a backstop, harness-written run log, shorter prompts), and during this ticket's own runs (tests decide, no revert). The CLI now finishes clean at the cost of working alone; Tron fails on what the model can do, not on the harness
+- **Status:** frozen until a stronger local model; no further runs
 - **Category:** spike
 - **Importance:** medium
 - **Effort:** M
@@ -352,7 +353,7 @@ after red `DONE`, green at the limit `DONE`, red at the limit `BLOCKED` with its
 A second change came before the restart. The orchestrator also wrote a test file next to
 `PLAN.md`, which its prompt forbids. The push to act came from the server's `BUDGET_MSG`, "write
 the files with your tools, one at a time", read after a cut-off thinking block. It now reads "make
-your next step one tool call" (`config.env`). The agents keep their own message, since writing
+your next tool call" (`config.env`; first worded "make your next step one tool call", shortened before Tron attempt 2 started). The agents keep their own message, since writing
 files is their job. This touches every session on the server, not only the workflow. T-002's
 solo Tron run, the comparison here, ran with the old wording.
 
@@ -366,3 +367,91 @@ Same profile (`dedicated`, CTX 64000, BUDGET 8192, AGENT_BUDGET 4096), `runs/` n
 others. The CLI finishes clean, under 1:00, with no `BLOCKED` and no compaction in any child. If a
 worker does not hold spec -> tests -> code with the shorter prompt, that is the finding, and the
 order goes back into the prompt in words before anything else changes.
+
+## Report: the workflow is frozen (2026-09-23)
+
+**Decision (the user's): the localagent workflow stays as it is, as a feature, and is not
+developed further. No more runs until a stronger local model is out.** Too much of what fails
+now fails on what the model can do, and nothing in these runs suggests that more harness work
+would change that for this model.
+
+### What the runs showed
+
+| Run | Result | Wall | Turns | Output |
+| --- | --- | --- | --- | --- |
+| CLI, solo, no workflow | works, 31 checks | 0:33 | 22 | 48k |
+| CLI, workflow, 2026-09-22 | stopped, 2 of 3 units | 1:00 | 105 | 106k |
+| CLI, workflow, attempt 2 (revert) | stopped, 2 of 5 units | 0:49 | 96 | 77k |
+| **CLI, workflow, attempt 3** | **works, no `BLOCKED`, e2e `PASS`, README** | **0:34** | 61 | 55k |
+| Tron, solo (T-002) | a working game with tests | 1:30 | 108 | 118k |
+| Tron, workflow, attempt 1 | stopped at 0:34: the revert broke `node_modules` | 0:34 | 68 | 58k |
+| **Tron, workflow, attempt 2** | **stopped at 2:50, the game core not finished** | 2:50 | 123 | 225k |
+
+On the CLI the workflow now costs what working alone costs, and leaves a spec per unit, an e2e
+check and a README behind. On Tron it cost twice the solo run's time and output, and had not
+finished its first unit, the pure game core, when it was stopped. The core was re-cut twice
+(U1 → U1a/U1b → U1b-a/U1b-b), and every dispatch took 40 to 60 minutes.
+
+### What was the harness, and is fixed
+
+In commit order on this branch, after `9f91a49`:
+
+1. **The tests decide, not the status line** (`2774fec`). The agent's first green run of the
+   test command after a red one ends the dispatch as `DONE`. The harness pauses the child and
+   runs the exact command itself, so a pipe or a subset does not decide. It cuts the tail of
+   unasked checks after green, which had cost the CLI's U2 its whole dispatch. It fired once in
+   each of the two runs that followed it.
+2. **No revert** (`9f07a8a`). The revert threw away a green unit (CLI attempt 2) and deleted
+   `package.json` and half of `node_modules` under a scaffold the backstop had cut off
+   mid-install (Tron attempt 1). A failed dispatch's files stay, and the next one starts on them
+   with a fresh context.
+3. **The budget message asks for one tool call** (`186bb45`). "Write the files" led the
+   orchestrator to write a test file next to its plan.
+4. **A cut-off dispatch is `BLOCKED`, whatever the suite says; no split rule for it; the scaffold
+   proves the test command fails on an empty suite** (the commit with this report). The
+   intermediate rule, green at the backstop counts as `DONE`, failed twice in Tron attempt 2:
+   - Its result line said "ran 30 turns", and the orchestrator's rule "a dispatch that ran out of
+     turns: split the unit" won over the `DONE`. It re-cut twice and noted "contradictory
+     signals".
+   - The green was hollow. `npm test` was `node --test`, which does not pick up `*.spec.mjs` and
+     exits 0 when it finds no test at all, so U1's syntax-broken test file read as green.
+
+   `pytest`, `unittest` (3.12+), `jest`, `vitest` and `mocha` fail on an empty suite, and
+   `node --test` does not. The scaffold now runs the command once on no tests and changes it
+   until it fails. It hands the final command back on its result line, and the orchestrator uses
+   that line. The split rule was left over from the idea that a cut-off unit is too large, which
+   the 2026-09-22 logs had already disproved. Verified against the stand-in endpoint: green after
+   red is `DONE`; cut off, green or red, is `BLOCKED` with its files in place. **Not verified with
+   the real model**: this last change never ran on it.
+
+### What is the model, and is not fixable here
+
+From the Tron worker sessions (`runs/T-019-tron/`, dispatch logs):
+
+- **About two minutes per turn, 4k to 9k output tokens per turn.** Whole test files are
+  rewritten (9k tokens each), and game ticks are simulated by hand in the thinking to derive
+  expected positions.
+- **A compaction every 10 to 12 turns inside a worker, 7 in all.** After one, the worker no
+  longer knows what is on disk. U1 "found" an `units/U1/game.js` that did not exist, and argued
+  with itself for four turns about whether its own write had landed.
+- **Edits that do not match, then full rewrites.** Syntax errors in its own tests (an apostrophe
+  in a test name, missing brackets), then turns spent finding them.
+- **Test-runner discovery took 15 turns** in U1b, and several turns in U1a, which ran experiments
+  on Node's test discovery.
+- **U1 deleted the scaffold's `tests/e2e.mjs`** in its sixth turn.
+- **The plan had three units, not the eight or nine the ticket asked for**, and it passed the
+  gate. Smaller units would have lowered the context pressure; they would not have removed any
+  of the above.
+
+None of these is a harness decision. A prompt could name some of them, but every rule added to
+a prompt so far was either ignored or checked with turns. The CLI, where units are small and
+the logic trivial, works. Tron, where one unit needs real reasoning, does not.
+
+### What stays open
+
+- **Resume when a stronger local model is out.** Rerun the CLI (`runs/T-019-cli-2/run.sh`) and
+  Tron (`runs/T-019-tron/run.sh`) as they are. Both scripts check the installed shape. The
+  comparisons are the solo runs: CLI 0:33, Tron 1:30.
+- **The fourth change has not run on a real model.** It is the first thing the next run shows.
+- Logs: `runs/T-019-cli-2/` (`work-solo`, `work-2`, `work`, with reports),
+  `runs/T-019-tron/` (`work-1`, `work`, with reports). They are gitignored and kept.

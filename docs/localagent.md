@@ -16,16 +16,18 @@ is. The window and compaction numbers it runs inside are in [`dev.md`](dev.md#co
 
 ## Status
 
-**Experimental.** The core of this repo - `bonsai-server` and `bonsai-pi` - is not; this workflow
-is. Experimental here means two things: it may change without a deprecation note, and its numbers
-come from one machine and a handful of runs.
+**Frozen, 2026-09-23.** The core of this repo - `bonsai-server` and `bonsai-pi` - is not
+experimental; this workflow is, and it is no longer developed. It stays in the repo as it is, and
+no further runs are planned until a stronger local model is out. Most of what fails now fails on
+the model, not the harness: see [where it stands](#where-it-stands).
 
 | | |
 | --- | --- |
-| Known to work | one small feature (a todo CLI), planned interactively with the user first, on the CUDA backend, in the previous three-agent shape |
-| Not shown to work | **the current shape** (one worker per unit, harness gate and run log, turn limit as a backstop, agent budget) has not run yet; its predecessor ran the CLI for an hour, below; large tasks (the Tron run below was aborted after five hours); anything on the Vulkan backend at 7 tok/s |
-| Measured | four runs, T-013, T-018, Tron and the T-019 CLI run, all below in [Economics](#economics) |
-| Open | [T-013](../backlog/T-013-localagent-first-run.md), [T-019](../backlog/T-019-workflow-cost.md), [T-031](../backlog/T-031-sharp-chat-template.md) |
+| Works | a small feature (a todo CLI), planned with the user: no `BLOCKED`, e2e and docs, in about the time the model takes alone (0:34 against 0:33) |
+| Does not | a real task: Tron was stopped at 2:50 with its first unit, the game core, unfinished. Alone the model built it in 1:30. Nothing on the Vulkan backend at 7 tok/s |
+| Measured | T-013, T-018, the first Tron run, and T-019's CLI and Tron runs, below in [Economics](#economics) and in [T-019](../backlog/T-019-workflow-cost.md#report-the-workflow-is-frozen-2026-09-23) |
+| Not run on a real model | the last harness change: a cut-off dispatch is `BLOCKED` with its files in place, and the scaffold checks that the test command fails on an empty suite |
+| Open | [T-013](../backlog/T-013-localagent-first-run.md), [T-019](../backlog/T-019-workflow-cost.md) (frozen), [T-031](../backlog/T-031-sharp-chat-template.md) |
 
 Its ancestor was evaluated across eight local models before this repo existed, and no model of
 that generation produced a working artifact through it; one held the whole process. That series is
@@ -96,7 +98,8 @@ That was before T-019 folded the skill's 164 lines into a 79-line orchestrator p
   [dev.md](dev.md#thinking-in-the-prompt)). At 8192 a child crossed pi's 48k compaction trigger
   in five or six turns, every time - the Tron numbers below.
 - **A runaway dispatch is cut off after `AGENT_MAX_TURNS` (30)** and comes back as a `BLOCKED`
-  tool error naming the log. The prompts' own "two attempts, then escalate" rule was never once
+  tool error naming the log, with its files left in place for the next attempt, even when the
+  suite is green: in the Tron run "green" was a test runner that had found no test. The prompts' own "two attempts, then escalate" rule was never once
   followed: the Tron U2 implementer ran 332 turns. It is a backstop and no prompt mentions it:
   at 15 it cut off three dispatches that were done, see
   [the T-019 CLI run](#the-t-019-cli-run-where-the-turns-went).
@@ -105,6 +108,10 @@ That was before T-019 folded the skill's 164 lines into a 79-line orchestrator p
   touched). `· changed:` is the diff against it, so it names what this dispatch did, not what the
   tree holds. A failed dispatch's files stay: the next attempt starts on them with a fresh
   context. Putting them back was tried and removed, see the next point.
+- **The agent's first green test run after a red one ends the dispatch as `DONE`.** Whenever
+  it runs a command containing the test command, the child is paused and `dispatch` runs the
+  exact command itself, so a pipe or a subset does not decide. Without it, workers that were
+  green spent their last turns on checks nobody asked for, until the backstop cut them off.
 - **After a `DONE`, `dispatch` runs the test command** the orchestrator passed as `test` and
   appends `· tests: green|RED (exit N): <tail>`. The orchestrator used to spend eight or nine
   turns on that gate, inventing checks as it went. Every line ends with turns and minutes.
@@ -315,15 +322,27 @@ steps and lose the rest (539 lines of prompts and templates before, 296 after).
   log. Those are checks the workflow demanded anyway, moved from the model into code
   because the model did not hold them, and did hold them at a cost in turns where it tried.
 
-## What is not shown yet
+## Where it stands
 
-- **The shape described above has not run as a whole.** Its predecessor ran the CLI for an hour
-  (the T-019 section); the next measurement is the CLI again on this shape, against T-018's 124
-  turns and 1:40 and that hour. The plan is in [T-019](../backlog/T-019-workflow-cost.md).
-- **Whether shorter prompts cut the orientation.** The old worker prompt said "read nothing else"
-  and every worker read three to six things first. Some of that was leftovers, which the missing
-  placeholder removes; how much was the prompt, the next run will say.
-- **Whether a worker still holds the order** spec -> tests -> code with a shorter prompt. It did
-  in every dispatch of the T-019 run; the session log shows it.
+T-019 ran the shape above on the todo CLI and on Tron, and changed the harness three times along
+the way. The runs, the numbers and every change are in
+[the T-019 report](../backlog/T-019-workflow-cost.md#report-the-workflow-is-frozen-2026-09-23).
+In short:
 
-Next round: [T-019](../backlog/T-019-workflow-cost.md).
+- **The CLI works.** On the third attempt: two units, e2e `PASS`, a README, no `BLOCKED`, 0:34 and
+  55k output tokens. Alone the model took 0:33 and 48k. The orchestrator spent 4 of its 20 turns
+  on the ledger, down from 18.
+- **Tron does not.** After 2:50 and 225k output tokens the game core was still not finished,
+  re-cut twice. Alone the model built the game in 1:30 with 118k.
+- **What stopped Tron is the model.** About two minutes and 4k to 9k output tokens per turn,
+  because test files are rewritten whole and game ticks are simulated by hand in the thinking. A
+  compaction every 10 to 12 turns inside a worker, after which it no longer knows what is on
+  disk. Syntax errors in its own tests, 15 turns on test-runner discovery, a scaffold's file
+  deleted. No harness decision produces any of these, and prompt rules against them have so far
+  been ignored or checked with turns.
+- **What the harness got wrong, and fixed:** reverting a failed dispatch (it threw away a green
+  unit and broke `node_modules`), and trusting a green suite at the backstop (the runner had found
+  no test). Both are gone, as is the split rule for a cut-off unit.
+
+Picking it up again means rerunning `runs/T-019-cli-2/run.sh` and `runs/T-019-tron/run.sh` on a
+stronger model against the solo numbers, 0:33 and 1:30.
