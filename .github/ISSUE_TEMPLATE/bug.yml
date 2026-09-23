@@ -18,7 +18,7 @@ body:
         - install.sh link
         - bonsai-server (starting or running)
         - bonsai-pi (the agent session)
-        - bonsai-pi --localagent (the experimental workflow)
+        - bonsai-pi --localagent (the frozen workflow, not recommended)
         - something else
     validations:
       required: true

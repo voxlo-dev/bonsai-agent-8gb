@@ -4,16 +4,17 @@
 - **Category:** spike
 - **Importance:** low
 - **Effort:** S
-- **Depends on:** none; runs after the agent-budget measurement in T-019, not inside its runs
+- **Depends on:** none
 
 ## Why
 
-The T-019 run on the RTX shows the spec-architect spending five minutes per turn: 8k of thinking
-to the budget before a `cat`, twelve turns for one spec. [dev.md](../docs/dev.md#reasoning) has
-measured that this model ignores instructions about thinking length, effort levels included, and
-that only `--reasoning-budget` stops it. The per-agent budget is therefore the first lever
-(T-019). Sharp is the candidate found alongside it, and this ticket records what it would and
-would not change, so the measurement is short and the result unambiguous.
+The T-019 workflow run on the RTX showed the spec-architect spending five minutes per turn: 8k
+of thinking to the budget before a `cat`, twelve turns for one spec.
+[dev.md](../docs/dev.md#reasoning) has measured that this model ignores instructions about
+thinking length, effort levels included, and that only `--reasoning-budget` stops it. The
+per-agent budget was therefore the first lever (T-019, closed with the workflow frozen). Sharp is
+the candidate found alongside it, and this ticket records what it would and would not change, so
+the measurement is short and the result unambiguous.
 
 **What Sharp is for this setup.** Bonsai-2-27B is Qwen3.8-27B with the architecture unchanged,
 and the GGUF embeds the Qwen 3.5-family template (`general.architecture = qwen35`). Sharp is
@@ -45,10 +46,9 @@ That would be fewer turns to a result, not fewer tokens per turn. Other quant, u
 n = 25; whether it carries to the ternary model under a hard budget is exactly what one session
 shows.
 
-**One risk for the workflow.** "Ask a sharp question, don't guess" is a different rule from the
-agents' `ESCALATE`. A child that asks instead ends without a status line, and `dispatch` returns
-`BLOCKED`. `chat_template_kwargs: {"terse": false}` switches the block off, but then nothing of
-Sharp is left for this setup. So Sharp reaches the workflow only if the single session earns it.
+**The workflow is out of scope.** "Ask a sharp question, don't guess" would clash with the
+localagent agents' `ESCALATE`, but that workflow is frozen and not recommended
+([status](../docs/localagent.md#status)), so only a plain session counts.
 
 ## What
 
@@ -67,12 +67,12 @@ Sharp is left for this setup. So Sharp reaches the workflow only if the single s
    clock, and whether any turn ends in a question instead of an action.
 4. **Read the result on one axis.** Thinking per turn still at the 8192 budget → Sharp did not
    touch the question; note it in `docs/dev.md#reasoning` as tried, leave the variable empty,
-   close. Turns to result clearly down → a second session to confirm, then a T-019-style run
-   with the workflow, watching for the `BLOCKED`-by-question case; `terse: false` is not an
-   option there, it removes the effect.
+   close. Turns to result clearly down → a second session to confirm. No workflow run: the
+   localagent workflow is frozen ([status](../docs/localagent.md#status)); `terse: false` is not
+   an option either way, it removes the effect.
 
 ## Verify
 
-Same profile as T-019 (`dedicated`, CTX 64000, BUDGET 8192), same machine, stock and Sharp in
+The `dedicated` profile (CTX 64000, BUDGET 8192), same machine, stock and Sharp in
 the same session of work. Numbers into `docs/dev.md#reasoning` beside the effort table; the
-variable stays opt-in until a workflow run shows the gain survives the agents.
+variable stays opt-in until a second plain session confirms the gain.

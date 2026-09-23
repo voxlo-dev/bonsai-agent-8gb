@@ -29,7 +29,7 @@ incomplete, and a change that contradicts one needs a new measurement, not an ar
 | `bin/bonsai-server` | The launcher. Sources `config.env` **directly**, not through `lib.sh` |
 | `bin/bonsai-pi` | Starts the pinned pi with `PI_CODING_AGENT_DIR` set to `PI_AGENT_DIR`, and starts/stops `bonsai-server` around it when none runs. State in `$BONSAI_HOME/run/`. Same sourcing as `bonsai-server` |
 | `pi/pi-agents.md` | Runtime artifact, copied to `$PI_AGENT_DIR/AGENTS.md`. **Not this file** |
-| `pi/extensions/localagent/` | pi extension behind `bonsai-pi --localagent`: the `dispatch` tool, and the session's `hasUI` for the plan gate |
+| `pi/extensions/localagent/` | pi extension behind `bonsai-pi --localagent`: the `dispatch` tool, and the session's `hasUI` for the plan gate. **Frozen, not recommended**: see below |
 | `pi/localagent-workflow/` | The workflow it runs: skill, five agent prompts (orchestrator, scaffold, worker, e2e, docs), templates. Descended from the author's seven-agent workflow in `docs/model-comparison.md`; every cut since is measured in `docs/localagent.md` |
 
 ## Four things that bite
@@ -103,7 +103,7 @@ Every fact has one home, chosen by how long it stays true.
 | `CONTRIBUTING.md` | — | the short human form of this file: the measurement rule, what gets declined |
 | `docs/dev.md` | durable | why each non-default choice is what it is, with its measurement, plus troubleshooting. Also this project's decisions log |
 | `docs/performance.md` | durable | what limits generation speed: the bandwidth roofline, and the optimizations tried and rejected |
-| `docs/localagent.md` | durable | the experimental workflow: shape, how it runs on pi, the measured runs |
+| `docs/localagent.md` | durable | the frozen workflow: why it is not recommended, its shape, how it runs on pi, the measured runs |
 | `docs/model-comparison.md` | durable | eight local models as coding agents on 8 GB, from the study predating this repo. **Frozen**: a record of finished work. New measurements go to `docs/dev.md` or a ticket |
 | `backlog/` | living | one file per ticket, `T-NNN-{slug}.md`, indexed in `backlog.md` with the `Next ticket` counter. A private one gets `.local.md` and stays out of the repo, so the numbers have gaps |
 | `runs/` | ephemeral | gitignored but kept: one folder per long measurement |

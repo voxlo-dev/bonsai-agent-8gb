@@ -110,8 +110,9 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		ctx.ui.notify(
-			`localagent is experimental and frozen: small features run end to end, large tasks fail on this model. ` +
-				`Agents: ${AGENT_MODEL || "the session model"}, at most ${MAX_TURNS} turns each. See docs/localagent.md#status.`,
+			`localagent is frozen and not recommended: on this model it fails real tasks that bonsai-pi without ` +
+				`--localagent finishes. Agents: ${AGENT_MODEL || "the session model"}, at most ${MAX_TURNS} turns each. ` +
+				`See docs/localagent.md#status.`,
 			"warning",
 		);
 

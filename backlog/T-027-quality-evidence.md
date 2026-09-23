@@ -1,6 +1,6 @@
 # T-027 — Put the quality claim on the record: prompts, logs, and the comparison run
 
-- **Summary:** Publish the evidence behind "a 27B-class agent on 8 GB": the Tron-game prompt and session, one localagent run, and the same tasks on the next-best 8 GB candidate
+- **Summary:** Publish the evidence behind "a 27B-class agent on 8 GB": the Tron-game prompt and session, and the same tasks on the next-best 8 GB candidate
 - **Category:** spike
 - **Importance:** high
 - **Effort:** M
@@ -39,8 +39,8 @@ therefore narrower and stronger: result quality of the dense 27B at MoE speed, i
 
 1. **A `docs/evidence.md`** (or a section in `docs/localagent.md`): the exact Tron prompt, the
    `bonsai-pi` invocation and profile, the session's turn count, wall time, tokens, compactions,
-   and the resulting repo or a tarball link. Same for one localagent run (T-013's, if its
-   artefacts are complete).
+   and the resulting repo or a tarball link. No localagent run: the workflow is frozen and
+   not recommended, and its failures are in [localagent.md](../docs/localagent.md#status).
 2. **The comparison, cheapest valid form:** one Bonsai singleshot through *OpenCode* with the
    study's exact prompt and follow-up, on the 4060 Ti. That drops it straight into the study's
    table with the same harness, prompt and card class; no re-run of eight models. Record wall

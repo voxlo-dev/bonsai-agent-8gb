@@ -32,8 +32,8 @@ which is a real way to use an agent and the reason the AMD number is in the head
   configured for this model**, not just pointed at it: its own private instance, a context budget
   that keeps it from compacting every single turn, a thinking budget that fits under its output
   cap, and an `AGENTS.md` written for a model this size. Your own pi keeps its settings.
-- **An experimental multi-agent workflow** for work too large for one context, which hands each
-  step to a separate agent with its own small window.
+- **A multi-agent workflow, not recommended**: it is in the repo, frozen, for a stronger model.
+  On this one it has not beaten the model working alone, see [Use](#use).
 - **One command to install it**, and a preflight that tells you in ten seconds whether your machine
   can run it, before anything downloads or compiles.
 
@@ -130,9 +130,7 @@ bonsai-server        # terminal 1, ready at "listening on http://127.0.0.1:8080"
 bonsai-pi            # terminal 2
 ```
 
-`bonsai-pi --localagent` runs the [localagent workflow](docs/localagent.md) (**experimental and frozen**: it finishes a small feature, not a larger one, see its [status](docs/localagent.md#status)): pi plans with you, then after you approve the plan hands each unit to a separate agent with its own small context — spec, tests from its acceptance criteria, code — then e2e and docs. Type the task after it starts, or pass it as `bonsai-pi --localagent -- "task"`. The `--` matters: without it pi reads the task as the flag's value.
-
-It has carried one small feature end to end on the CUDA backend, in an earlier shape; the current shape (one worker per unit, turn-limited dispatches) is not measured yet. Large tasks and the Vulkan backend at 7 tok/s are not shown to work, and it may change without notice.
+**`bonsai-pi --localagent` is not recommended: use `bonsai-pi` without it.** The flag runs the [localagent workflow](docs/localagent.md), a multi-agent pipeline that hands each unit of a planned task to a separate agent with its own small context. On this model it does not work for real tasks: a browser game the model builds alone in 1:30 was stopped after 2:50 with its first unit unfinished. On a small CLI it finished in the time the model takes alone, after two failed attempts. It is frozen and kept for a stronger local model; [its status](docs/localagent.md#status) has the numbers.
 
 `bonsai-pi` is a separate pi instance, so a pi you use with other models keeps its own settings. The server is also a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1`, model `bonsai-27b`.
 
@@ -145,7 +143,7 @@ Two backends, chosen with `BACKEND` (default `cuda`).
 | Card | `BACKEND` | System | Generation | For |
 | --- | --- | --- | --- | --- |
 | RTX 4060 Ti 8 GB | `cuda` | Windows 11 + WSL2, Ubuntu 26.04 | 36 tok/s | interactive use, the default |
-| AMD RX 570 8 GB | `vulkan` | Debian 13, RADV, Mesa 26.1 | 7 tok/s | **batch use**: `-p` runs and the localagent workflow left alone, not a conversation |
+| AMD RX 570 8 GB | `vulkan` | Debian 13, RADV, Mesa 26.1 | 7 tok/s | **batch use**: `-p` runs left alone, not a conversation |
 
 **Expected to work, unmeasured** - same architecture families, nobody has reported numbers.
 `build` takes the CUDA arch from `nvidia-smi` and the Vulkan build is generic, so these should
@@ -248,8 +246,8 @@ AMD RX 570 8 GB through Vulkan (RADV, Mesa 26.1.2), same KV types, with the PTQ1
 64k takes 7 434 MiB of 8 192, so the `dedicated` profile holds on this card too.
 
 Five times slower than the 4060 Ti, and eight times on prompts: a 4k-token agent prompt takes
-~75 s before the first token. That is batch territory - a task handed to `bonsai-pi -p` or the
-localagent workflow and left alone - and it is why `vulkan` is not the default. The fork's own
+~75 s before the first token. That is batch territory - a task handed to `bonsai-pi -p` and left
+alone - and it is why `vulkan` is not the default. The fork's own
 Vulkan kernel did 0.94 tok/s on this card; [Other GPU backends](docs/dev.md#other-gpu-backends)
 has the way from there to 7.
 
@@ -269,7 +267,7 @@ cannot, `PROFILE=display` drops the window to 48k to make room.
 | [docs/dev.md](docs/dev.md) | why every non-default choice is what it is, with its measurement, plus troubleshooting |
 | [docs/performance.md](docs/performance.md) | what limits generation speed, and what was tried and rejected |
 | [docs/model-comparison.md](docs/model-comparison.md) | eight local models as coding agents on 8 GB, measured before this repo existed |
-| [docs/localagent.md](docs/localagent.md) | the experimental multi-agent workflow, frozen |
+| [docs/localagent.md](docs/localagent.md) | the multi-agent workflow: frozen, not recommended, and why |
 | [AGENTS.md](AGENTS.md) | where contributors and AI agents start |
 
 ## Contributing

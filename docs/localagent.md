@@ -1,33 +1,46 @@
 # The localagent workflow
 
+**Not recommended. Use `bonsai-pi` without the flag.** On this model the workflow has finished
+only a toy task, and there it was no faster than the model working alone. On the one real task
+measured it failed where the model alone succeeded. It is frozen since 2026-09-23 and stays in the
+repo unchanged, for a stronger local model. [Status](#status) has the numbers.
+
 A multi-agent build pipeline for a weak local model: plan gate, then one worker dispatch per
 small unit (spec -> tests -> code -> test run), then e2e and docs. It lives in
 [`pi/localagent-workflow/`](../pi/localagent-workflow/) and runs as `bonsai-pi --localagent`
 through the extension in [`pi/extensions/localagent/`](../pi/extensions/localagent/).
 
-Its point is not throughput. A 27B model holds a feature badly and forgets what it decided three
-turns ago; this pipeline gives every step a tiny single-purpose context and writes the run's memory
-to disk instead of the window. That costs turns, and **the turn count is the bill** - see
-[Economics](#economics). Reach for it when the model is weak or context discipline is the priority,
-never for a one-line fix.
+The idea was context discipline, not throughput. A 27B model holds a feature badly and forgets
+what it decided three turns ago, so the pipeline gives every step a tiny single-purpose context and
+writes the run's memory to disk instead of the window. That costs turns, and **the turn count is
+the bill** - see [Economics](#economics). On this model the bill was never paid back.
 
-This file is the workflow's home: the shape, the two measured runs, and why each piece is what it
-is. The window and compaction numbers it runs inside are in [`dev.md`](dev.md#context-budget).
+This file is the workflow's home: the shape, the measured runs, why each piece is what it is, and
+why it is not recommended. The window and compaction numbers it runs inside are in
+[`dev.md`](dev.md#context-budget).
 
 ## Status
 
-**Frozen, 2026-09-23.** The core of this repo - `bonsai-server` and `bonsai-pi` - is not
-experimental; this workflow is, and it is no longer developed. It stays in the repo as it is, and
-no further runs are planned until a stronger local model is out. Most of what fails now fails on
-the model, not the harness: see [where it stands](#where-it-stands).
+**Not recommended, and frozen since 2026-09-23.** The core of this repo - `bonsai-server` and
+`bonsai-pi` - is not affected. This workflow does not do what it is for on this model, and it is
+no longer developed. It stays in the repo as it is, so that a stronger local model can be run
+through it unchanged. No runs are planned until one is out.
 
-| | |
-| --- | --- |
-| Works | a small feature (a todo CLI), planned with the user: no `BLOCKED`, e2e and docs, in about the time the model takes alone (0:34 against 0:33) |
-| Does not | a real task: Tron was stopped at 2:50 with its first unit, the game core, unfinished. Alone the model built it in 1:30. Nothing on the Vulkan backend at 7 tok/s |
-| Measured | T-013, T-018, the first Tron run, and T-019's CLI and Tron runs, below in [Economics](#economics) and in [T-019](../backlog/T-019-workflow-cost.md#report-the-workflow-is-frozen-2026-09-23) |
-| Not run on a real model | the last harness change: a cut-off dispatch is `BLOCKED` with its files in place, and the scaffold checks that the test command fails on an empty suite |
-| Open | [T-013](../backlog/T-013-localagent-first-run.md), [T-019](../backlog/T-019-workflow-cost.md) (frozen), [T-031](../backlog/T-031-sharp-chat-template.md) |
+| Task | Workflow, final shape | The model alone |
+| --- | --- | --- |
+| todo CLI: four commands over a JSON file | works on the third attempt: 0:34, 61 turns, 55k output. The two attempts before it stopped with units `BLOCKED` | works: 0:33, 22 turns, 48k (the orchestrator skipped the workflow, [see below](#the-cli)) |
+| Tron: browser game, relay server | stopped at 2:50 with its first unit, the game core, unfinished; 225k output | a working game with tests: 1:30, 108 turns, 118k |
+
+- **On a small task it buys nothing over the model alone** but a spec per unit, an e2e check and
+  a README, and it took three attempts to get there once.
+- **On a real task it fails, and the failures are the model's**:
+  [what stopped Tron](#what-stopped-tron-the-model). No harness change moved them, and every
+  prompt rule against them was ignored or checked with turns.
+- **Nothing was measured on the Vulkan backend.** At 7 tok/s a run would take a working day.
+- **The last harness change never ran on a real model**: a cut-off dispatch is `BLOCKED` with
+  its files in place, and the scaffold checks that the test command fails on an empty suite.
+
+[Resuming](#resuming) says what to run when a stronger model is out.
 
 Its ancestor was evaluated across eight local models before this repo existed, and no model of
 that generation produced a working artifact through it; one held the whole process. That series is
@@ -322,27 +335,119 @@ steps and lose the rest (539 lines of prompts and templates before, 296 after).
   log. Those are checks the workflow demanded anyway, moved from the model into code
   because the model did not hold them, and did hold them at a cost in turns where it tried.
 
-## Where it stands
+## The T-019 runs: why it is frozen
 
-T-019 ran the shape above on the todo CLI and on Tron, and changed the harness three times along
-the way. The runs, the numbers and every change are in
-[the T-019 report](../backlog/T-019-workflow-cost.md#report-the-workflow-is-frozen-2026-09-23).
-In short:
+T-019 ran the shape above on the todo CLI and on Tron, 2026-09-22/23, and changed the harness four
+times along the way. Same profile throughout (`dedicated`, CTX 64000, BUDGET 8192,
+AGENT_BUDGET 4096), on the RTX 4060 Ti. Logs: `runs/T-019-cli/`, `runs/T-019-cli-2/` (`work-solo`,
+`work-2`, `work`) and `runs/T-019-tron/` (`work-1`, `work`), each with its `run.sh` and reports,
+gitignored and kept on that machine.
 
-- **The CLI works.** On the third attempt: two units, e2e `PASS`, a README, no `BLOCKED`, 0:34 and
-  55k output tokens. Alone the model took 0:33 and 48k. The orchestrator spent 4 of its 20 turns
-  on the ledger, down from 18.
-- **Tron does not.** After 2:50 and 225k output tokens the game core was still not finished,
-  re-cut twice. Alone the model built the game in 1:30 with 118k.
-- **What stopped Tron is the model.** About two minutes and 4k to 9k output tokens per turn,
-  because test files are rewritten whole and game ticks are simulated by hand in the thinking. A
-  compaction every 10 to 12 turns inside a worker, after which it no longer knows what is on
-  disk. Syntax errors in its own tests, 15 turns on test-runner discovery, a scaffold's file
-  deleted. No harness decision produces any of these, and prompt rules against them have so far
-  been ignored or checked with turns.
-- **What the harness got wrong, and fixed:** reverting a failed dispatch (it threw away a green
-  unit and broke `node_modules`), and trusting a green suite at the backstop (the runner had found
-  no test). Both are gone, as is the split rule for a cut-off unit.
+| Run | Result | Wall | Turns | Output |
+| --- | --- | --- | --- | --- |
+| CLI, the model alone | works, 31 checks | 0:33 | 22 | 48k |
+| CLI, workflow, 15-turn limit | stopped, 2 of 3 units | 1:00 | 105 | 106k |
+| CLI, workflow, with revert | stopped, 2 of 5 units | 0:49 | 96 | 77k |
+| **CLI, workflow, tests decide** | **works, no `BLOCKED`, e2e `PASS`, README** | **0:34** | 61 | 55k |
+| Tron, `bonsai-pi` alone (T-002) | a working game with tests | 1:30 | 108 | 118k |
+| Tron, workflow, attempt 1 | stopped: the revert broke `node_modules` | 0:34 | 68 | 58k |
+| **Tron, workflow, attempt 2** | **stopped, the game core not finished** | 2:50 | 123 | 225k |
 
-Picking it up again means rerunning `runs/T-019-cli-2/run.sh` and `runs/T-019-tron/run.sh` on a
-stronger model against the solo numbers, 0:33 and 1:30.
+### The CLI
+
+**The solo baseline came by accident.** On the first try after the second reshape the
+orchestrator skipped the workflow: its first reasoning quotes the plan gate, then it read "this is
+a test environment" as a benchmark, called the task small, and built `todo.py` with a 31-check
+test script alone. No dispatch, no `PLAN.md`; "you write `localagent/PLAN.md` and nothing else"
+did not hold it. Every later run added one closing line to the prompt, "Use the localagent
+workflow for this task." That run is the number the workflow has to beat.
+
+**With the revert**, stopped at 0:49 with two of five units. Neither `BLOCKED` was a unit too
+large. The first U2 attempt had 26 tests green at turn 26, spent four turns on checks nobody asked
+for, wrote no status line, was cut off at 30 and reverted: a finished unit thrown away, the third
+time a green dispatch had been cut off. The re-cut spent 14 turns on why unittest did not find a
+test class that lacked `unittest.TestCase`. Both lost turns to a plan error, `todo.py` next to a
+package `todo/`. That run is why the tests, not the status line, now end a dispatch.
+
+**Tests decide**: the first clean run. Two units instead of five, no scaffold (stdlib only),
+e2e `PASS`, a README; unknown commands, a missing id and a corrupt store all fail with a clear
+message and exit 1. The orchestrator spent 4 of its 20 turns on the ledger, down from 18; the
+first write in a worker came at turn 3 and 2, down from 4 to 7. One worker of two broke the
+order: U1 wrote `spec.md` and the code in one turn, the tests after, so they were never red and
+the green-after-red rule had nothing to fire on. The order is in the worker prompt in words.
+
+### Tron
+
+**Attempt 1**, stopped at 0:34. The scaffold hit the 30-turn backstop during a long Playwright
+install and was reverted. The snapshot had caught the install's files as the dispatch's own, so the
+revert deleted `package.json`, the config and the lockfile, and left `node_modules` half removed.
+The orchestrator split the scaffold in two to fit the limit. The revert was removed before the
+restart.
+
+**Attempt 2**, stopped at 2:50. The plan had three units, not the eight or nine the run asked
+for, and passed the gate. The core was re-cut twice, U1 -> U1a/U1b -> U1b-a/U1b-b, and every
+dispatch took 40 to 60 minutes. Two things were the harness:
+
+- A result line that said "ran 30 turns" beside a green suite. The orchestrator's rule "a
+  dispatch that ran out of turns: split the unit" won over the `DONE`, and it re-cut twice,
+  noting "contradictory signals".
+- The green was hollow. The test command was `node --test`, which does not pick up `*.spec.mjs`
+  and exits 0 when it finds no test at all, so a syntax-broken test file read as green.
+
+### What the harness got wrong, and fixed
+
+In commit order, all on the shape described in [Running it on pi](#running-it-on-pi):
+
+1. **The tests decide, not the status line.** The agent's first green run of the test command
+   after a red one ends the dispatch as `DONE`; the harness pauses the child and runs the exact
+   command itself. It fired once in each of the two runs after it. The trigger depends on the
+   stack: the agent's command must contain the test command as written (whitespace ignored), so
+   `npm test -- foo` matches `npm test`, and `npx jest`, or a bare `pytest` against
+   `python3 -m pytest`, does not. Then the dispatch ends the old way.
+2. **No revert.** It threw away a green unit and broke a dependency tree. What it guarded
+   against, a retry passing the gate on inherited work, the per-dispatch `changed:` already
+   shows.
+3. **The budget message asks for one tool call** (`BUDGET_MSG` in `config.env`, for every
+   session on the server). "Write the files with your tools", read after a cut-off thinking
+   block, led the orchestrator to write a test file next to its plan.
+4. **A cut-off dispatch is `BLOCKED`, whatever the suite says; no split rule for it; the scaffold
+   proves the test command fails on an empty suite**, and hands the final command back on its
+   result line. `pytest`, `unittest` (3.12+), `jest`, `vitest` and `mocha` fail on an empty suite;
+   `node --test` does not. The split rule was left over from the idea that a cut-off unit is too
+   large, which the [CLI logs](#the-t-019-cli-run-where-the-turns-went) had already disproved.
+   Verified against a scripted stand-in endpoint only.
+
+### What stopped Tron: the model
+
+From the Tron worker sessions:
+
+- **About two minutes and 4k to 9k output tokens per turn.** Whole test files are rewritten,
+  9k tokens each, and game ticks are simulated by hand in the thinking to derive expected
+  positions.
+- **A compaction every 10 to 12 turns inside a worker, seven in all.** After one the worker no
+  longer knows what is on disk: U1 "found" a `units/U1/game.js` that did not exist, and argued
+  with itself for four turns about whether its own write had landed.
+- **Edits that do not match, then full rewrites.** Syntax errors in its own tests (an apostrophe
+  in a test name, missing brackets), then turns spent finding them.
+- **Test-runner discovery took 15 turns** in U1b and several in U1a, which ran experiments on
+  Node's test discovery.
+- **U1 deleted the scaffold's `tests/e2e.mjs`** in its sixth turn.
+
+Smaller units would have lowered the context pressure; they would not have removed any of these.
+None is a harness decision, and every rule added to a prompt so far was either ignored or checked
+with turns. Where units are small and the logic trivial, the workflow works and gains nothing;
+where one unit needs real reasoning, it does not work. The model alone, with its whole context,
+built the same game in half the time.
+
+## Resuming
+
+Only with a stronger local model; nothing in these runs suggests more harness work would change
+the result for this one.
+
+1. `./install.sh pi`, then rerun `runs/T-019-cli-2/run.sh` and `runs/T-019-tron/run.sh` as they
+   are. Both check the installed shape. The work dir needs its own `git init`: the snapshot needs
+   a repo, and without one `changed:` describes whatever repo encloses it (T-018's `changed:`
+   lines were never about its own work dir).
+2. The first thing to read off is harness change 4, which has not run on a real model.
+3. Compare against `bonsai-pi` alone on the same model, not against the numbers above: the
+   workflow is worth recommending only if it beats the model working alone on Tron.

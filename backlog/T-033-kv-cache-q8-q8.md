@@ -4,13 +4,14 @@
 - **Category:** spike
 - **Importance:** medium
 - **Effort:** S (steps 1-3), M with step 4
-- **Depends on:** none for steps 1-3; step 4 after T-019's next CLI run, so it does not measure two changes at once
+- **Depends on:** none
 
 ## Why
 
 The author suspects the KV quantization is too aggressive for coding work. Nothing observed so far
 points there: the T-019 session logs show process failures (a turn limit, orientation, a ledger),
-and the code bugs in them are ordinary ones. But the choice itself has no measurement behind it,
+and the code bugs in them are ordinary ones
+([localagent.md](../docs/localagent.md#the-t-019-runs-why-it-is-frozen)). But the choice itself has no measurement behind it,
 which is this repo's own condition for revisiting it. [`dev.md`](../docs/dev.md#kv-cache) cites
 the general rule and the ~25 % saving, nothing measured on this model.
 
@@ -78,8 +79,9 @@ has finished shows the VRAM for each type at 56k.
 log. The profile that would ship is that window with the four budget values re-derived by the
 rules in [`dev.md`](../docs/dev.md#context-budget).
 
-**4. Only if step 1 shows a gap or step 2 a speed gain:** the todo CLI under
-`bonsai-pi --localagent` on that profile, against T-019's next CLI run on `q8_0`/`q4_0`. This is
+**4. Only if step 1 shows a gap or step 2 a speed gain:** the todo CLI in a plain `bonsai-pi`
+session on that profile, same prompt, against one on `q8_0`/`q4_0` run the same day (the last
+one took 0:33, 22 turns, 48k output). Not under `--localagent`, which is frozen. This is
 the only step that measures behaviour, and the most expensive one; a KLD in the noise makes it
 unnecessary.
 

@@ -190,8 +190,8 @@ Three things moved it, measured one at a time at 16k:
 
 **So: CUDA for interactive use, Vulkan for batch.** 7 tok/s is a fifth of the 4060 Ti and
 54 tok/s prompt an eighth: a 4k-token agent prompt costs ~75 s before the first token, a
-10k-token localagent step ~25 minutes. That is fine for a task handed over and left alone
-(`bonsai-pi -p`, the localagent workflow) and not for a conversation, which is why `vulkan` is
+10k-token agent step ~25 minutes. That is fine for a task handed over and left alone
+(`bonsai-pi -p`) and not for a conversation, which is why `vulkan` is
 supported and not the default. How the setup does it, all of it measured above:
 
 - `BACKEND=vulkan` builds the fork with `GGML_VULKAN=ON` and `patches/vulkan/` applied; the
@@ -515,10 +515,15 @@ against a real remote server - the machine this was written on has no GPU.
 
 ## localagent workflow
 
-`bonsai-pi --localagent` runs a multi-agent build pipeline for this model. Its own file:
-[`localagent.md`](localagent.md) - the shape, how it runs on pi, and the two measured runs that
-decided what it looks like. What it constrains here is only the window: a dispatched agent that
-ends on `length` comes back as `BLOCKED`, see [Context budget](#context-budget).
+`bonsai-pi --localagent` runs a multi-agent build pipeline for this model. **Decided
+2026-09-23: frozen and not recommended.** On a small CLI it finished in the time the model takes
+alone; on the study's Tron prompt it was stopped after 2:50 with its first unit unfinished, where
+the model alone built the game in 1:30. What stopped it was the model - compactions inside a
+worker, whole-file rewrites, broken tests of its own - not the harness, so it stays in the repo
+unchanged until a stronger local model is out. Its own file, [`localagent.md`](localagent.md),
+has the runs, the shape, and how it runs on pi. What it constrains here is only the window: a
+dispatched agent that ends on `length` comes back as `BLOCKED`, see
+[Context budget](#context-budget).
 
 ## Sampling
 
