@@ -251,8 +251,10 @@ export default function (pi: ExtensionAPI) {
 			line = statusLine(lastText(final)) || `BLOCKED ${name} returned no status line`;
 			error = false;
 		}
+		// Taken before the test run, whose own output (__pycache__, coverage) is not the agent's work.
+		const after = before ? snapshot(ctx.cwd) : null;
 		if (test && /^(DONE|NO STATUS)\b/.test(line)) line += tests(ctx.cwd, test);
-		line += changes(ctx.cwd, before, /^(BLOCKED|ESCALATE)\b/.test(line));
+		line += changes(ctx.cwd, before, after, /^(BLOCKED|ESCALATE)\b/.test(line));
 		line += ` · ${turns} turns, ${Math.round((Date.now() - started) / 60_000)} min`;
 		log(ctx.cwd, `${unit ? `${unit} ` : ""}${name}`, line);
 		if (error) throw new Error(line);
@@ -282,8 +284,7 @@ export default function (pi: ExtensionAPI) {
 	// What this dispatch changed, against the snapshot taken before it, so a later dispatch does not
 	// inherit the credit. A failed one is put back: in T-019 a third U2 attempt came back DONE green
 	// in 34 seconds without writing a file, on what two BLOCKED attempts had left on disk.
-	function changes(cwd: string, before: string | null, revert: boolean): string {
-		const after = before ? snapshot(cwd) : null;
+	function changes(cwd: string, before: string | null, after: string | null, revert: boolean): string {
 		if (!before || !after) return "";
 		const d = spawnSync("git", ["diff", "-z", "--name-status", "--no-renames", "--relative", before, after], { cwd, encoding: "utf8" });
 		if (d.status !== 0) return "";
