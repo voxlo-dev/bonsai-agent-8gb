@@ -103,8 +103,8 @@ That was before T-019 folded the skill's 164 lines into a 79-line orchestrator p
 - **Every dispatch is snapshotted.** Before the agent starts, `dispatch` writes the work tree as a
   git tree through a private copy of the index (the user's index, HEAD and history are not
   touched). `· changed:` is the diff against it, so it names what this dispatch did, not what the
-  tree holds. A `BLOCKED` or `ESCALATE` dispatch has its changes put back (`· reverted`), so the
-  next attempt does not inherit half a unit and pass the gate on it.
+  tree holds. A failed dispatch's files stay: the next attempt starts on them with a fresh
+  context. Putting them back was tried and removed, see the next point.
 - **After a `DONE`, `dispatch` runs the test command** the orchestrator passed as `test` and
   appends `· tests: green|RED (exit N): <tail>`. The orchestrator used to spend eight or nine
   turns on that gate, inventing checks as it went. Every line ends with turns and minutes.
@@ -292,8 +292,11 @@ steps and lose the rest (539 lines of prompts and templates before, 296 after).
   dispatch changed. The orchestrator's version of that gate was 17 turns per unit in the Tron run.
 - **The ledger is the harness's too.** `LOG.md` is written by `dispatch`; the orchestrator writes
   `PLAN.md` and nothing else. By hand, the ledger was up to half the orchestrator's turns.
-- **A failed dispatch is reverted.** Otherwise the next attempt inherits its work and the gate
-  cannot tell built from found.
+- **A failed dispatch is not reverted.** Reverting was meant to keep a retry from passing the gate
+  on inherited work, which the per-dispatch `changed:` already shows. In practice it threw away a
+  green U2 that the backstop had cut off before its status line, and in the Tron run it deleted
+  half of `node_modules` under a scaffold whose install the backstop had cut off. A retry starts
+  on what is there, with a clean context.
 - **The turn limit is a backstop, not the escalation rule.** 30 turns, enforced by the extension,
   in no prompt. At 15 it cut off finished work three times in one hour.
 - **Units are one file and three to five criteria**, because that is what one dispatch builds
@@ -309,7 +312,7 @@ steps and lose the rest (539 lines of prompts and templates before, 296 after).
 - **Nothing is enforced *in the prompts*.** `wall.ts`, the `permission.read` blocks and the
   brief-path allowlist are gone since T-018, the turn budgets of e2e and docs since T-019. What is
   enforced is enforced by the extension: the turn limit, the agent budget, the test run, the
-  revert, the log. Those are checks the workflow demanded anyway, moved from the model into code
+  log. Those are checks the workflow demanded anyway, moved from the model into code
   because the model did not hold them, and did hold them at a cost in turns where it tried.
 
 ## What is not shown yet
@@ -318,8 +321,8 @@ steps and lose the rest (539 lines of prompts and templates before, 296 after).
   (the T-019 section); the next measurement is the CLI again on this shape, against T-018's 124
   turns and 1:40 and that hour. The plan is in [T-019](../backlog/T-019-workflow-cost.md).
 - **Whether shorter prompts cut the orientation.** The old worker prompt said "read nothing else"
-  and every worker read three to six things first. Some of that was leftovers, which the revert
-  and the missing placeholder remove; how much was the prompt, the next run will say.
+  and every worker read three to six things first. Some of that was leftovers, which the missing
+  placeholder removes; how much was the prompt, the next run will say.
 - **Whether a worker still holds the order** spec -> tests -> code with a shorter prompt. It did
   in every dispatch of the T-019 run; the session log shows it.
 

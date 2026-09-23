@@ -334,6 +334,21 @@ the worker prompt already says "Written before the code". One of two is not a ra
 **Next:** Tron (step 3), which is where the workflow either earns its cost or does not. Before
 that, possibly a second CLI run, to see whether the order slip repeats.
 
+## Step 3, Tron: the revert goes (2026-09-23, run in progress)
+
+`runs/T-019-tron/`, started on `7d85620`. The scaffold dispatch hit the 30-turn backstop during a
+long Playwright install and was reverted. The revert deleted `package.json`, the config and the
+lockfile, and left `node_modules` half removed, because the snapshot had caught the install's
+files as the dispatch's own. The orchestrator then split the scaffold in two to fit the limit.
+
+So the revert has now cost a green unit (CLI, second attempt) and broken a dependency tree. What
+it guarded against, a retry passing the gate on inherited work, is already visible in the
+per-dispatch `changed:`. **Removed** after this run started (the running session keeps the
+version it loaded): a failed dispatch's files stay, the next dispatch starts on them with a clean
+context, and the turn limit stays as the backstop. Verified against the stand-in endpoint: green
+after red `DONE`, green at the limit `DONE`, red at the limit `BLOCKED` with its files in place.
+`./install.sh pi` after the Tron run, not during it.
+
 ## Verify
 
 Same profile (`dedicated`, CTX 64000, BUDGET 8192, AGENT_BUDGET 4096), `runs/` next to the

@@ -39,7 +39,7 @@ Binding for `localagent-scaffold`; decided with the user, not by an agent mid-ru
 One unit is **one worker dispatch: one file, three to five acceptance criteria.** A relay server
 with a lobby, a tick loop and reconnect handling is three units, not one; a rules engine with
 movement, collision and scoring is two. More units cost one dispatch each and nothing else; a unit
-too big costs the dispatch and comes back reverted.
+too big costs the dispatch.
 
 Cut by behaviour that can fail its own test, not by architecture: "room codes and join
 validation", not "types". Order them so each builds on finished ones.

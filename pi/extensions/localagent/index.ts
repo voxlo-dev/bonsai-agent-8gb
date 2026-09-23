@@ -8,9 +8,10 @@
 // the models.json entry the agents run on (a smaller thinking budget than the orchestrator), and
 // LOCALAGENT_MAX_TURNS, a backstop after which a runaway dispatch is killed and reported as BLOCKED.
 // After a DONE the tool runs the unit's test command itself, so the gate is a fact in the result,
-// not a model turn; it lists what the dispatch changed, and puts back what a failed one changed.
-// The tests, not the status line, decide whether the work stays: an agent's first green run after
-// a red one ends its dispatch as DONE, and one cut off at the backstop with green tests is DONE too.
+// not a model turn; it lists what the dispatch changed. Nothing is put back: the next dispatch
+// starts from the tree as it is, with a fresh context. The tests, not the status line, decide:
+// an agent's first green run after a red one ends its dispatch as DONE, and one cut off at the
+// backstop with green tests is DONE too.
 // Rationale: docs/localagent.md.
 import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -123,7 +124,7 @@ export default function (pi: ExtensionAPI) {
 				"The agent starts with an empty context: the brief must carry the absolute working directory, the " +
 				"commands, the task, and the paths of its inputs. Agents run one at a time; a runaway is cut off " +
 				`after ${MAX_TURNS} turns (BLOCKED). With \`test\`, the command runs after a DONE and its verdict is appended ` +
-				"to the result, then the files this dispatch changed; a BLOCKED or ESCALATE dispatch has its changes reverted.",
+				"to the result, then the files this dispatch changed. A failed dispatch's files stay where it left them.",
 			promptSnippet: "Run one localagent-* agent on a brief and return its status line",
 			parameters: Type.Object({
 				agent: StringEnum(subagents as [string, ...string[]], { description: "Agent name" }),
@@ -175,7 +176,7 @@ export default function (pi: ExtensionAPI) {
 		// pipe, a subset or a different stack's exit convention does not decide. Red is remembered;
 		// green after a red ends the dispatch: the tests were written before the code, so that is the
 		// agent's own "done". Twice in T-019 a worker was green and spent its last turns on checks
-		// nobody asked for until the backstop cut it off and the revert threw the unit away.
+		// nobody asked for until the backstop cut it off, and the unit was thrown away.
 		const testCmd = test ? test.replace(/\s+/g, " ").trim() : "";
 		const commands = new Map<string, string>();
 		let seenRed = false;
@@ -292,13 +293,13 @@ export default function (pi: ExtensionAPI) {
 		// Taken before the test run, whose own output (__pycache__, coverage) is not the agent's work.
 		const after = before ? snapshot(ctx.cwd) : null;
 		// Cut off at the backstop, but green and with work outside localagent/: the unit is built, only
-		// the status line is missing. Kept, not reverted - that is what the tests are for.
+		// the status line is missing - that is what the tests are for.
 		if (cutOff && test && before && after && builtSomething(ctx.cwd, before, after) && (await passes(ctx.cwd, test))) {
-			line = `DONE ${name} ran ${MAX_TURNS} turns without a status line; kept because its tests are green`;
+			line = `DONE ${name} ran ${MAX_TURNS} turns without a status line, and its tests are green`;
 			error = false;
 		}
 		if (test && /^(DONE|NO STATUS)\b/.test(line)) line += tests(ctx.cwd, test);
-		line += changes(ctx.cwd, before, after, /^(BLOCKED|ESCALATE)\b/.test(line));
+		line += changes(ctx.cwd, before, after);
 		line += ` · ${turns} turns, ${Math.round((Date.now() - started) / 60_000)} min`;
 		log(ctx.cwd, `${unit ? `${unit} ` : ""}${name}`, line);
 		if (error) throw new Error(line);
@@ -348,23 +349,15 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	// What this dispatch changed, against the snapshot taken before it, so a later dispatch does not
-	// inherit the credit. A failed one is put back: in T-019 a third U2 attempt came back DONE green
-	// in 34 seconds without writing a file, on what two BLOCKED attempts had left on disk.
-	function changes(cwd: string, before: string | null, after: string | null, revert: boolean): string {
+	// inherit the credit: in T-019 a third U2 attempt came back DONE green in 34 seconds without
+	// writing a file, on what two cut-off attempts had left on disk. Nothing is put back any more. A
+	// revert threw a green unit away and, in the Tron run, deleted half of node_modules under a
+	// scaffold whose install the backstop had cut off; the next agent sees the tree fresh instead.
+	function changes(cwd: string, before: string | null, after: string | null): string {
 		if (!before || !after) return "";
-		const d = spawnSync("git", ["diff", "-z", "--name-status", "--no-renames", "--relative", before, after], { cwd, encoding: "utf8" });
+		const d = spawnSync("git", ["diff", "-z", "--name-only", "--no-renames", "--relative", before, after], { cwd, encoding: "utf8" });
 		if (d.status !== 0) return "";
-		const fields = d.stdout.split("\0").filter(Boolean);
-		const entries: [string, string][] = [];
-		for (let i = 0; i + 1 < fields.length; i += 2) entries.push([fields[i], fields[i + 1]]);
-		const files = entries.map(([, f]) => f);
-		let out = ` · changed: ${files.length ? files.slice(0, 20).join(" ") : "nothing"}${files.length > 20 ? " …" : ""}`;
-		if (revert && entries.length) {
-			for (const [s, f] of entries) if (s === "A") fs.rmSync(path.join(cwd, f), { force: true });
-			const back = entries.filter(([s]) => s !== "A").map(([, f]) => f);
-			const r = back.length ? spawnSync("git", ["restore", `--source=${before}`, "--worktree", "--", ...back], { cwd, encoding: "utf8" }) : null;
-			out += r && r.status !== 0 ? ` · revert failed: ${r.stderr.trim().slice(0, 200)}` : " · reverted";
-		}
-		return out;
+		const files = d.stdout.split("\0").filter(Boolean);
+		return ` · changed: ${files.length ? files.slice(0, 20).join(" ") : "nothing"}${files.length > 20 ? " …" : ""}`;
 	}
 }
