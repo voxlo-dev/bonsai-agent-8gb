@@ -32,10 +32,42 @@ which is a real way to use an agent and the reason the AMD number is in the head
   configured for this model**, not just pointed at it: its own private instance, a context budget
   that keeps it from compacting every single turn, a thinking budget that fits under its output
   cap, and an `AGENTS.md` written for a model this size. Your own pi keeps its settings.
-- **A multi-agent workflow, not recommended**: it is in the repo, frozen, for a stronger model.
-  On this one it has not beaten the model working alone, see [Use](#use).
 - **One command to install it**, and a preflight that tells you in ten seconds whether your machine
   can run it, before anything downloads or compiles.
+
+## Install
+
+You need a **GPU with 8 GB of VRAM that is not driving your monitor**, Linux or WSL2, and about
+14 GB of free disk. `install.sh` checks your machine first and stops with a list of anything
+missing, before it downloads or compiles.
+
+```bash
+git clone https://github.com/voxlo-dev/bonsai-agent-8gb.git
+cd bonsai-agent-8gb
+./install.sh                    # NVIDIA
+BACKEND=vulkan ./install.sh     # AMD
+```
+
+A 10 to 30 minute compile and a 5.6 GB download; re-running is safe. On Windows, set up WSL2
+first: [On Windows](#on-windows). Single steps, paths and the full list:
+[Install in detail](#install-in-detail) and [Requirements](#requirements).
+
+## Use
+
+```bash
+bonsai-pi            # in your project directory; arguments go to pi
+```
+
+`bonsai-pi` starts the server in the background when none is running, waits for the model to load, and stops the server again when the last `bonsai-pi` session ends. Its output goes to `~/.local/share/bonsai-local/server.log`. A server you started yourself is used and left running:
+
+```bash
+bonsai-server        # terminal 1, ready at "listening on http://127.0.0.1:8080"; Ctrl+C stops it
+bonsai-pi            # terminal 2
+```
+
+`bonsai-pi` is a separate pi instance, so a pi you use with other models keeps its own settings. The server is also a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1`, model `bonsai-27b`.
+
+`bonsai-pi --localagent` starts a multi-agent workflow that is frozen and **not recommended**: on this model it does worse than `bonsai-pi` alone. [docs/localagent.md](docs/localagent.md#status) says why.
 
 ## Why it is interesting
 
@@ -55,84 +87,6 @@ claim that Bonsai closes the quality gap is **not measured yet**: no Bonsai run 
 comparison table, and the run that would put it there is
 [T-027](backlog/T-027-quality-evidence.md). Until then this repo claims interactive speed for a
 dense 27B on 8 GB, and nothing about beating other models.
-
-## Install
-
-You need a **GPU with 8 GB of VRAM that is not driving your monitor**, Linux or WSL2, and about
-14 GB of free disk. The full list is under [Requirements](#requirements), but you do not have to
-read it first: `install.sh` runs a preflight that checks your machine and stops with a list of
-what is missing before it spends any time.
-
-```bash
-git clone https://github.com/voxlo-dev/bonsai-agent-8gb.git
-cd bonsai-agent-8gb
-./install.sh                    # NVIDIA
-BACKEND=vulkan ./install.sh     # AMD
-```
-
-That is one apt toolchain, a 10 to 30 minute compile, a 5.6 GB download and a pi install. Every
-step is idempotent, so re-running it is safe and skips whatever is already done.
-
-`BACKEND` has to be set for every later `./install.sh build` too (or exported): `build` decides on it which toolchain to use and which patches from [`patches/`](patches/) to apply to the fork. `bonsai-server` reads it as well.
-
-The default runs every step in order. Name one or more steps to run just those:
-
-| Step | Does |
-| --- | --- |
-| `deps` | apt toolchain for `BACKEND`: build tools, cmake, then gcc-13 and the CUDA toolkit, or glslc and the Vulkan headers (asks for sudo, so run it in a real terminal) |
-| `build` | clones the fork at the pinned commit, applies `patches/$BACKEND/`, builds `llama-server` (`FORCE=1` rebuilds) |
-| `model` | links the GGUF from the Hugging Face cache, or downloads and checksums it |
-| `pi` | installs its own pinned pi and writes its config: provider `local` as default, the context budget, `AGENTS.md`. A pi you already have and `~/.pi` stay untouched |
-| `link` | puts `bonsai-server` and `bonsai-pi` into `~/.local/bin` |
-
-Everything lands in `~/.local/share/bonsai-local` (`BONSAI_HOME`), pi's config and sessions in `pi-agent/` there. `SKIP_PREFLIGHT=1` skips the checks if you know better than they do.
-
-### On Windows
-
-This runs under WSL2, and the reference machine for the CUDA numbers is exactly that. In
-PowerShell as administrator:
-
-```powershell
-wsl --install -d Ubuntu
-```
-
-Reboot if it asks, then open Ubuntu and work entirely inside it. Two things matter:
-
-- **The NVIDIA driver belongs on the Windows side only.** WSL2 passes the GPU through. Do not
-  install a Linux NVIDIA driver inside Ubuntu; it will break the passthrough. Check it works with
-  `nvidia-smi` inside Ubuntu before you install anything here.
-- **Keep the repo in the Linux filesystem**, under `~`, not in `/mnt/c/`. Building across the
-  Windows filesystem boundary is several times slower.
-
-```bash
-sudo apt update && sudo apt install -y git
-git clone https://github.com/voxlo-dev/bonsai-agent-8gb.git
-cd bonsai-agent-8gb && ./install.sh
-```
-
-AMD cards under WSL2 are untested. Use native Linux for the Vulkan backend.
-
-There is no native Windows install and there will not be one: the reference machine for the
-CUDA numbers is WSL2, and a second PowerShell implementation of the install and the server
-lifecycle is not maintainable next to it. The reasoning is in
-[`docs/dev.md#windows`](docs/dev.md#windows).
-
-## Use
-
-```bash
-bonsai-pi            # in your project directory; arguments go to pi
-```
-
-`bonsai-pi` starts the server in the background when none is running, waits for the model to load, and stops the server again when the last `bonsai-pi` session ends. Its output goes to `~/.local/share/bonsai-local/server.log`. A server you started yourself is used and left running:
-
-```bash
-bonsai-server        # terminal 1, ready at "listening on http://127.0.0.1:8080"; Ctrl+C stops it
-bonsai-pi            # terminal 2
-```
-
-**`bonsai-pi --localagent` is not recommended: use `bonsai-pi` without it.** The flag runs the [localagent workflow](docs/localagent.md), a multi-agent pipeline that hands each unit of a planned task to a separate agent with its own small context. On this model it does not work for real tasks: a browser game the model builds alone in 1:30 was stopped after 2:50 with its first unit unfinished. On a small CLI it finished in the time the model takes alone, after two failed attempts. It is frozen and kept for a stronger local model; [its status](docs/localagent.md#status) has the numbers.
-
-`bonsai-pi` is a separate pi instance, so a pi you use with other models keeps its own settings. The server is also a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1`, model `bonsai-27b`.
 
 ## Requirements
 
@@ -172,6 +126,53 @@ decode speed), ROCm/HIP, Metal, and CPU-only. Vulkan is the one AMD path.
 - ~14 GB free disk: 5.6 GB model, 1.9 GB build, ~5.4 GB for the CUDA toolkit from apt. ~9 GB when a CUDA toolkit is already installed, or with Vulkan
 
 Without apt, install the toolchain yourself (CUDA and gcc, or glslc and the Vulkan SDK; plus cmake, git, python3) and skip `deps`: `./install.sh build model pi link`.
+
+## Install in detail
+
+`./install.sh` runs every step in order. Name one or more steps to run just those; each one skips
+work that is already done:
+
+| Step | Does |
+| --- | --- |
+| `deps` | apt toolchain for `BACKEND`: build tools, cmake, then gcc-13 and the CUDA toolkit, or glslc and the Vulkan headers (asks for sudo, so run it in a real terminal) |
+| `build` | clones the fork at the pinned commit, applies `patches/$BACKEND/`, builds `llama-server` (`FORCE=1` rebuilds) |
+| `model` | links the GGUF from the Hugging Face cache, or downloads and checksums it |
+| `pi` | installs its own pinned pi and writes its config: provider `local` as default, the context budget, `AGENTS.md`. A pi you already have and `~/.pi` stay untouched |
+| `link` | puts `bonsai-server` and `bonsai-pi` into `~/.local/bin` |
+
+`BACKEND` has to be set for every later `./install.sh build` too (or exported): `build` decides on it which toolchain to use and which patches from [`patches/`](patches/) to apply. `bonsai-server` reads it as well.
+
+Everything lands in `~/.local/share/bonsai-local` (`BONSAI_HOME`), pi's config and sessions in `pi-agent/` there. `SKIP_PREFLIGHT=1` skips the checks if you know better than they do.
+
+### On Windows
+
+This runs under WSL2, and the reference machine for the CUDA numbers is exactly that. In
+PowerShell as administrator:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+Reboot if it asks, then open Ubuntu and work entirely inside it. Two things matter:
+
+- **The NVIDIA driver belongs on the Windows side only.** WSL2 passes the GPU through. Do not
+  install a Linux NVIDIA driver inside Ubuntu; it will break the passthrough. Check it works with
+  `nvidia-smi` inside Ubuntu before you install anything here.
+- **Keep the repo in the Linux filesystem**, under `~`, not in `/mnt/c/`. Building across the
+  Windows filesystem boundary is several times slower.
+
+```bash
+sudo apt update && sudo apt install -y git
+git clone https://github.com/voxlo-dev/bonsai-agent-8gb.git
+cd bonsai-agent-8gb && ./install.sh
+```
+
+AMD cards under WSL2 are untested. Use native Linux for the Vulkan backend.
+
+There is no native Windows install and there will not be one: the reference machine for the
+CUDA numbers is WSL2, and a second PowerShell implementation of the install and the server
+lifecycle is not maintainable next to it. The reasoning is in
+[`docs/dev.md#windows`](docs/dev.md#windows).
 
 ## Configure
 
