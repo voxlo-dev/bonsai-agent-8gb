@@ -349,6 +349,17 @@ context, and the turn limit stays as the backstop. Verified against the stand-in
 after red `DONE`, green at the limit `DONE`, red at the limit `BLOCKED` with its files in place.
 `./install.sh pi` after the Tron run, not during it.
 
+A second change came before the restart. The orchestrator also wrote a test file next to
+`PLAN.md`, which its prompt forbids. The push to act came from the server's `BUDGET_MSG`, "write
+the files with your tools, one at a time", read after a cut-off thinking block. It now reads "make
+your next step one tool call" (`config.env`). The agents keep their own message, since writing
+files is their job. This touches every session on the server, not only the workflow. T-002's
+solo Tron run, the comparison here, ran with the old wording.
+
+The first attempt was stopped after 34 minutes (scaffold `BLOCKED` and reverted, split, second
+half `DONE`) and kept as `work-1/` with `report-1.txt`. The restart runs without the revert and
+with the new message.
+
 ## Verify
 
 Same profile (`dedicated`, CTX 64000, BUDGET 8192, AGENT_BUDGET 4096), `runs/` next to the
