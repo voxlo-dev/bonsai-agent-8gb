@@ -9,6 +9,8 @@
 // LOCALAGENT_MAX_TURNS, a backstop after which a runaway dispatch is killed and reported as BLOCKED.
 // After a DONE the tool runs the unit's test command itself, so the gate is a fact in the result,
 // not a model turn; it lists what the dispatch changed, and puts back what a failed one changed.
+// The tests, not the status line, decide whether the work stays: an agent's first green run after
+// a red one ends its dispatch as DONE, and one cut off at the backstop with green tests is DONE too.
 // Rationale: docs/localagent.md.
 import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -168,6 +170,16 @@ export default function (pi: ExtensionAPI) {
 		let final: any;
 		let stderr = "";
 		let cutOff = false;
+		// The test gate inside the dispatch. Whenever the agent runs a command containing the test
+		// command, the child is paused (SIGSTOP) and the harness runs the exact command itself, so a
+		// pipe, a subset or a different stack's exit convention does not decide. Red is remembered;
+		// green after a red ends the dispatch: the tests were written before the code, so that is the
+		// agent's own "done". Twice in T-019 a worker was green and spent its last turns on checks
+		// nobody asked for until the backstop cut it off and the revert threw the unit away.
+		const testCmd = test ? test.replace(/\s+/g, " ").trim() : "";
+		const commands = new Map<string, string>();
+		let seenRed = false;
+		let greenEnd = false;
 		// What the agent is doing, as far as its event stream shows it: the orchestrator only ever
 		// gets the status line back, so this is the one live view of a dispatch. The full one is
 		// the child's session JSONL - see runs/watch-dispatch.py.
@@ -193,7 +205,12 @@ export default function (pi: ExtensionAPI) {
 				}
 				if (event.type === "tool_execution_start") {
 					const a = event.args ?? {};
+					if (event.toolName === "bash" && typeof a.command === "string") commands.set(event.toolCallId, a.command);
 					progress(`${event.toolName} ${trim(String(a.path ?? a.command ?? JSON.stringify(a)).replace(/\s+/g, " "), 300)}`);
+				} else if (event.type === "tool_execution_end" && testCmd && !greenEnd && !cutOff) {
+					const command = commands.get(event.toolCallId);
+					commands.delete(event.toolCallId);
+					if (command && command.replace(/\s+/g, " ").includes(testCmd)) gate();
 				} else if (event.type === "message_end" && event.message?.role === "assistant") {
 					turns++;
 					final = event.message;
@@ -231,8 +248,26 @@ export default function (pi: ExtensionAPI) {
 				resolve(1);
 			});
 			const kill = () => {
+				proc.kill("SIGCONT");
 				proc.kill("SIGTERM");
 				setTimeout(() => proc.exitCode === null && proc.kill("SIGKILL"), 5000).unref();
+			};
+			// Paused while the harness tests, so the tree it judges is the one the agent just ran.
+			let gating = Promise.resolve();
+			const gate = () => {
+				gating = gating.then(async () => {
+					if (greenEnd || cutOff || proc.exitCode !== null) return;
+					proc.kill("SIGSTOP");
+					const green = await passes(ctx.cwd, test!);
+					if (!green) seenRed = true;
+					else if (seenRed && !greenEnd) {
+						greenEnd = true;
+						progress("tests green after red: ending the dispatch");
+						kill();
+						return;
+					}
+					proc.kill("SIGCONT");
+				});
 			};
 			if (signal?.aborted) kill();
 			else signal?.addEventListener("abort", kill, { once: true });
@@ -243,7 +278,10 @@ export default function (pi: ExtensionAPI) {
 		const stop = final?.stopReason;
 		let line: string;
 		let error = true;
-		if (cutOff) line = `BLOCKED ${name} ran ${MAX_TURNS} turns without returning. Log: ${sessionDir || "(no session)"}`;
+		if (greenEnd) {
+			line = `DONE ${name} was ended by the harness at its first green test run after a red one`;
+			error = false;
+		} else if (cutOff) line = `BLOCKED ${name} ran ${MAX_TURNS} turns without returning. Log: ${sessionDir || "(no session)"}`;
 		else if (code !== 0 || !final || (stop && stop !== "stop")) {
 			const why = final?.errorMessage ?? (stop && stop !== "stop" ? `stopped on ${stop}` : stderr.trim().slice(-500) || `exit ${code}`);
 			line = `BLOCKED ${name} did not finish: ${why}`;
@@ -253,6 +291,12 @@ export default function (pi: ExtensionAPI) {
 		}
 		// Taken before the test run, whose own output (__pycache__, coverage) is not the agent's work.
 		const after = before ? snapshot(ctx.cwd) : null;
+		// Cut off at the backstop, but green and with work outside localagent/: the unit is built, only
+		// the status line is missing. Kept, not reverted - that is what the tests are for.
+		if (cutOff && test && before && after && builtSomething(ctx.cwd, before, after) && (await passes(ctx.cwd, test))) {
+			line = `DONE ${name} ran ${MAX_TURNS} turns without a status line; kept because its tests are green`;
+			error = false;
+		}
 		if (test && /^(DONE|NO STATUS)\b/.test(line)) line += tests(ctx.cwd, test);
 		line += changes(ctx.cwd, before, after, /^(BLOCKED|ESCALATE)\b/.test(line));
 		line += ` · ${turns} turns, ${Math.round((Date.now() - started) / 60_000)} min`;
@@ -271,6 +315,28 @@ export default function (pi: ExtensionAPI) {
 		const head = fs.existsSync(file) ? "" : "# Run log\n\nOne line per dispatch, appended by `dispatch`: the result as the orchestrator got it.\n\n";
 		const time = new Date().toTimeString().slice(0, 5);
 		fs.appendFileSync(file, `${head}- ${time} ${who} · ${line.replace(/\s*\n\s*/g, " ")}\n`);
+	}
+
+	// The test command's verdict alone, without blocking the session while it runs.
+	function passes(cwd: string, test: string): Promise<boolean> {
+		return new Promise((resolve) => {
+			const p = spawn("bash", ["-lc", test], { cwd, stdio: "ignore" });
+			const timer = setTimeout(() => p.kill("SIGKILL"), 300_000);
+			p.on("close", (c) => {
+				clearTimeout(timer);
+				resolve(c === 0);
+			});
+			p.on("error", () => {
+				clearTimeout(timer);
+				resolve(false);
+			});
+		});
+	}
+
+	// Whether a dispatch changed anything besides its notes under localagent/.
+	function builtSomething(cwd: string, before: string, after: string): boolean {
+		const d = spawnSync("git", ["diff", "-z", "--name-only", "--relative", before, after], { cwd, encoding: "utf8" });
+		return d.status === 0 && d.stdout.split("\0").some((f) => f && !f.startsWith("localagent/"));
 	}
 
 	// The objective gate after a DONE: the test command's verdict, a fact the orchestrator used to
