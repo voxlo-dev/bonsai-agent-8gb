@@ -67,7 +67,7 @@ bonsai-pi            # terminal 2
 
 `bonsai-pi` is a separate pi instance, so a pi you use with other models keeps its own settings. The server is also a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1`, model `bonsai-27b`.
 
-`bonsai-pi --localagent` starts a multi-agent workflow that is frozen and **not recommended**: on this model it does worse than `bonsai-pi` alone. [docs/localagent.md](docs/localagent.md#status) says why.
+`bonsai-pi --localagent` starts a highly experimental multi-agent workflow that is **not recommended** yet and performs worse, we're working on it: [docs/localagent.md](docs/localagent.md#status).
 
 ## Why it is interesting
 
