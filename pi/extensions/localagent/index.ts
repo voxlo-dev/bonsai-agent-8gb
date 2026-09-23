@@ -5,7 +5,7 @@
 // localagent-* agent as a separate `pi -p` process, one at a time. Without the flag it does nothing.
 // Two limits come from the environment, set by bin/bonsai-pi from config.env: LOCALAGENT_AGENT_MODEL,
 // the models.json entry the agents run on (a smaller thinking budget than the orchestrator), and
-// LOCALAGENT_MAX_TURNS, after which a dispatch is killed and reported as BLOCKED. After a DONE the
+// LOCALAGENT_MAX_TURNS, a backstop after which a runaway dispatch is killed and reported as BLOCKED. After a DONE the
 // tool runs the unit's test command itself, so the gate is a fact in the result, not a model turn.
 // Rationale: docs/localagent.md.
 import { spawn, spawnSync } from "node:child_process";
@@ -19,7 +19,7 @@ import { Type } from "typebox";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const workflow = path.join(here, "workflow");
 const STATUS = /^(DONE|ESCALATE|BLOCKED|PASS|FIXES_REQUIRED|NO_SURFACE)\b/;
-const MAX_TURNS = Math.max(1, Number(process.env.LOCALAGENT_MAX_TURNS) || 15);
+const MAX_TURNS = Math.max(1, Number(process.env.LOCALAGENT_MAX_TURNS) || 30);
 const AGENT_MODEL = process.env.LOCALAGENT_AGENT_MODEL || "";
 
 interface Agent {
@@ -97,8 +97,8 @@ export default function (pi: ExtensionAPI) {
 			description:
 				"Run one localagent-* agent on a brief and wait for its one-line result (DONE, ESCALATE, BLOCKED, ...). " +
 				"The agent starts with an empty context: the brief must carry the absolute working directory, the " +
-				"commands, the task, and the paths of its inputs. Agents run one at a time and are cut off after " +
-				`${MAX_TURNS} turns (BLOCKED). With \`test\`, the command runs after a DONE and its verdict is appended ` +
+				"commands, the task, and the paths of its inputs. Agents run one at a time; a runaway is cut off " +
+				`after ${MAX_TURNS} turns (BLOCKED). With \`test\`, the command runs after a DONE and its verdict is appended ` +
 				"to the result together with the files the agent changed.",
 			promptSnippet: "Run one localagent-* agent on a brief and return its status line",
 			parameters: Type.Object({
@@ -186,7 +186,7 @@ export default function (pi: ExtensionAPI) {
 						.trim();
 					said = spoke ? trim(spoke.split("\n").filter(Boolean).at(-1) ?? "", 300) : "";
 					progress("thinking");
-					// The escalation rule lives here, not in the prompt: no agent has ever stopped itself.
+					// A backstop, not a rule: no agent has ever stopped itself, and none is told the number.
 					if (turns >= MAX_TURNS && final.stopReason !== "stop") {
 						cutOff = true;
 						kill();
@@ -219,8 +219,7 @@ export default function (pi: ExtensionAPI) {
 		if (signal?.aborted) throw new Error(`BLOCKED ${name} aborted`);
 		if (cutOff) {
 			throw new Error(
-				`BLOCKED ${name} used its ${MAX_TURNS}-turn budget without finishing: the unit is too big for one dispatch, ` +
-					`re-cut it. Log: ${sessionDir || "(no session)"}`,
+				`BLOCKED ${name} ran ${MAX_TURNS} turns without returning. Log: ${sessionDir || "(no session)"}`,
 			);
 		}
 		const stop = final?.stopReason;

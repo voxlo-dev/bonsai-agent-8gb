@@ -33,8 +33,8 @@ You exist for the failure class no unit test can see: every unit green, and the 
 
 ## Rules
 
-- **Budget: 12 turns.** Past that, write the report with what you have and return. This is the cheap
-  step in the run; the units already carry the coverage.
+- **This is the cheap step in the run**; the units already carry the coverage. One flow, the
+  report, return.
 - Test only behaviour the PLAN promises. Do not invent scope.
 - The app must run the way it really runs — its own start or build command, its real config. A flow that only passes against a stubbed backend, a mocked route or a hand-built fixture page proves nothing about the build.
 - Deterministic and repeatable: **the one committed driver script**, no ad-hoc manual pokes.

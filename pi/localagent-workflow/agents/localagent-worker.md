@@ -42,9 +42,7 @@ Not the plan, not the ledger, not the surrounding repository's history.
   `ESCALATE toolchain <the error>`, not yours to repair.
 - **`git` is not a tool of this step.** The working directory may sit inside a larger
   repository whose history is not yours.
-- **Your turns are counted, and the dispatch is cut off at fifteen.** Two runs red on the same
-  failure: stop and `ESCALATE <what you tried, what it said>` while there is still a turn to say
-  it in. A third attempt is the cut-off, and the cut-off returns nothing you built.
+- Stuck on the same failure: `ESCALATE <what you tried, what it said>`.
 
 ## Return one line
 
