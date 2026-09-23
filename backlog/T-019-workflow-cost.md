@@ -1,6 +1,6 @@
 # T-019 — Cut what the localagent workflow still costs per unit
 
-- **Summary:** After the Tron run (five hours, one unit, aborted) the workflow is reshaped: one worker per unit, harness-run gate, 15-turn dispatch limit, 4096 agent budget. Measure the new shape on the todo CLI against T-018's 124 turns before anything larger
+- **Summary:** Reshaped twice: after Tron (one worker per unit, harness gate, turn limit, 4096 agent budget), then after the first CLI run on that shape, whose session logs showed the limit cutting off finished work and the ledger eating half the orchestrator's turns (limit as a backstop, harness-written run log, per-dispatch revert, shorter prompts). Measure the second shape on the todo CLI, then Tron
 - **Category:** spike
 - **Importance:** medium
 - **Effort:** M
@@ -50,7 +50,7 @@ Three of seven dispatches never returned. That is the finding that reshaped the 
 than tuning it: the three-agent split was costing two dispatches per unit for a reviewer that has
 found nothing in three units, and no prompt-only bound held.
 
-## What is on the branch now
+## What was on the branch for the 2026-09-22 runs
 
 | Where | Change |
 | --- | --- |
@@ -59,9 +59,10 @@ found nothing in three units, and no prompt-only bound held.
 | `pi/localagent-workflow/` | `localagent-worker` replaces spec-architect, implementer and reviewer; skill, orchestrator and templates follow: briefs carry facts only, the plan entry inline, units of one file and three to five criteria, no numeric rule anywhere in a prompt |
 | `docs/localagent.md` | the Tron numbers, the new shape and what it is answering, and the plain statement that it has not run yet |
 
-## What to run, in this order
+## What was run on 2026-09-22, in this order
 
-**Steps 1 to 3 ran on 2026-09-22; the results are below. Step 4 was not started.**
+**Steps 1 to 3 ran; the results are below. Step 4 was not started. Superseded by
+[the second reshape](#the-session-logs-and-the-second-reshape-2026-09-23).**
 
 The four changes are one shape; they are measured together. The comparison is against T-018's
 todo-CLI run (124 turns, 1:40, 164k output tokens) on the same profile.
@@ -173,10 +174,75 @@ A note on the measurement, not the shape: the work dir needs its own `git init`,
 `changed:` reports this repo's status, since `runs/` is gitignored. Both run scripts do it now;
 T-018's did not, so its `changed:` lines were never about its own work dir.
 
+## The session logs, and the second reshape (2026-09-23)
+
+The CLI run's orchestrator and child logs, read turn by turn, are in
+[`docs/localagent.md`](../docs/localagent.md#the-t-019-cli-run-where-the-turns-went): per dispatch,
+where the turns went. The short version: none of the three `BLOCKED`s was a unit too large (two
+were green or at their final test run); the spec -> tests -> code -> run core is five to seven
+turns, and the rest of a dispatch was orientation before it and an unasked check after; the
+orchestrator spent 18 of 35 turns on `STATE.md` and `PLAN.md`. The model over-attends to whatever
+is in reach, so the second reshape takes things away instead of adding bounds:
+
+| Commit | Change |
+| --- | --- |
+| `5865555` | `AGENT_MAX_TURNS` 15 -> 30, a backstop against a runaway; no prompt names a limit any more (worker, e2e 12, docs 8 gone). The `BLOCKED` no longer says "too big, re-cut" |
+| `bf1aa17` | `dispatch` snapshots the work tree (a git tree through a private index; the user's index and HEAD untouched). `changed:` is this dispatch's diff; a `BLOCKED` or `ESCALATE` dispatch is reverted. Status line: Markdown stripped, `NO STATUS: …` when there is none. Turns and minutes on every line |
+| `fe52d27` | `dispatch` appends every result to `localagent/LOG.md`; `STATE.md` and its template are gone, the orchestrator writes `PLAN.md` only. The protocol is the orchestrator prompt alone (SKILL.md, 164 lines, is a pointer and no longer offered). One failure rule instead of the five-row table |
+| `76020f4` | Worker prompt: the four steps and the `ESCALATE` exits, the spec's two sections inline, `unit-spec.md` gone. Scaffold: installs, does not run the empty suite, writes no placeholder |
+| `1f42d83` | the after-snapshot is taken before the harness's test run, so `__pycache__` is not the agent's |
+
+Prompts and templates: 539 lines before, 296 after. Verified here against a scripted stand-in
+endpoint, in pi: `DONE` with a green run, `ESCALATE` reverting a modified and an added file,
+`NO STATUS`, a runaway cut off at a lowered limit and reverted, all four lines in `LOG.md`. Not
+verified: anything a real model does with the shorter prompts.
+
+## What to run next
+
+1. **`./install.sh pi`** on the branch. `$PI_AGENT_DIR/extensions/localagent/workflow/templates/`
+   holds `PLAN.md` only; `bonsai-pi --localagent` announces "at most 30 turns each".
+
+2. **The todo CLI**, same prompt and profile as T-018 and the 2026-09-22 run, in
+   `runs/T-019-cli-2/` with its own `git init` in the work dir (the snapshot needs a repo, and
+   without its own `changed:` would describe this one). Let it finish: U1 to the last unit, e2e,
+   docs. `localagent/LOG.md` gives turns and minutes per dispatch directly; the orientation count
+   comes from the child logs:
+
+   ```bash
+   # per dispatch: the turn of the first write or edit, and the total
+   python3 -c '
+   import json, sys
+   for f in sys.argv[1:]:
+       n = first = 0
+       for l in open(f):
+           m = json.loads(l).get("message") or {}
+           if m.get("role") != "assistant": continue
+           n += 1
+           if not first and any(c.get("name") in ("write", "edit") for c in m["content"]): first = n
+       print(f.rsplit("/", 1)[-1][:19], "first write at turn", first, "of", n)
+   ' "$PI_AGENT_DIR"/sessions/*T-019-cli-2-work*/dispatch/*/*.jsonl
+   ```
+
+   | Read off | 2026-09-22 | Target |
+   | --- | --- | --- |
+   | wall clock, whole CLI | 1:00 for U1-U2 (T-018: 1:40 for all) | < 1:00 for all |
+   | orchestrator turns | 35 for two units | < 20 for all |
+   | orchestrator turns on the ledger | 18 | only the plan and a re-cut |
+   | `BLOCKED` | 3 | 0 |
+   | first write in a worker | turn 4 to 7 | turn 1 or 2 |
+   | compactions in children | 0 | 0 |
+   | spec -> tests -> code in each worker | held | held |
+
+   If the first write still comes at turn four or later, the orientation is not the prompt's
+   doing and a shorter prompt will not fix it; record that rather than tuning further.
+
+3. **Only then Tron**, the plan cut to eight or nine units, with the stop conditions set before
+   the start: a unit's second failure ends the run (the orchestrator's own rule now), and three
+   hours of wall clock ends it too.
+
 ## Verify
 
 Same profile (`dedicated`, CTX 64000, BUDGET 8192, AGENT_BUDGET 4096), `runs/` next to the
-others, `report.sh` for the numbers. Targets for the CLI: under 124 turns and under 1:40 with
-the same clean result, no compaction in any child. If a worker does not hold the spec-first
-order, or the CLI does not finish inside the turn limits, record it in `docs/localagent.md`
-as the shape's limit rather than tuning further.
+others. The CLI finishes clean, under 1:00, with no `BLOCKED` and no compaction in any child. If a
+worker does not hold spec -> tests -> code with the shorter prompt, that is the finding, and the
+order goes back into the prompt in words before anything else changes.
