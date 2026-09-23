@@ -9,9 +9,8 @@
 // LOCALAGENT_MAX_TURNS, a backstop after which a runaway dispatch is killed and reported as BLOCKED.
 // After a DONE the tool runs the unit's test command itself, so the gate is a fact in the result,
 // not a model turn; it lists what the dispatch changed. Nothing is put back: the next dispatch
-// starts from the tree as it is, with a fresh context. The tests, not the status line, decide:
-// an agent's first green run after a red one ends its dispatch as DONE, and one cut off at the
-// backstop with green tests is DONE too.
+// starts from the tree as it is, with a fresh context. An agent's first green run after a red one
+// ends its dispatch as DONE.
 // Rationale: docs/localagent.md.
 import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
@@ -111,7 +110,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		ctx.ui.notify(
-			`localagent is experimental: one small feature has run end to end, large tasks have not. ` +
+			`localagent is experimental and frozen: small features run end to end, large tasks fail on this model. ` +
 				`Agents: ${AGENT_MODEL || "the session model"}, at most ${MAX_TURNS} turns each. See docs/localagent.md#status.`,
 			"warning",
 		);
@@ -123,7 +122,7 @@ export default function (pi: ExtensionAPI) {
 				"Run one localagent-* agent on a brief and wait for its one-line result (DONE, ESCALATE, BLOCKED, ...). " +
 				"The agent starts with an empty context: the brief must carry the absolute working directory, the " +
 				"commands, the task, and the paths of its inputs. Agents run one at a time; a runaway is cut off " +
-				`after ${MAX_TURNS} turns (BLOCKED). With \`test\`, the command runs after a DONE and its verdict is appended ` +
+				"(BLOCKED). With `test`, the command runs after a DONE and its verdict is appended " +
 				"to the result, then the files this dispatch changed. A failed dispatch's files stay where it left them.",
 			promptSnippet: "Run one localagent-* agent on a brief and return its status line",
 			parameters: Type.Object({
@@ -227,6 +226,9 @@ export default function (pi: ExtensionAPI) {
 					said = spoke ? trim(spoke.split("\n").filter(Boolean).at(-1) ?? "", 300) : "";
 					progress("thinking");
 					// A backstop, not a rule: no agent has ever stopped itself, and none is told the number.
+					// A cut-off dispatch is BLOCKED even when the suite is green: in the T-019 Tron run
+					// "green" was `node --test` finding no test at all, and a result line naming the turn
+					// count sent the orchestrator to its split rule twice.
 					if (turns >= MAX_TURNS && final.stopReason !== "stop") {
 						cutOff = true;
 						kill();
@@ -282,7 +284,7 @@ export default function (pi: ExtensionAPI) {
 		if (greenEnd) {
 			line = `DONE ${name} was ended by the harness at its first green test run after a red one`;
 			error = false;
-		} else if (cutOff) line = `BLOCKED ${name} ran ${MAX_TURNS} turns without returning. Log: ${sessionDir || "(no session)"}`;
+		} else if (cutOff) line = `BLOCKED ${name} was cut off before it finished; its files are in place. Log: ${sessionDir || "(no session)"}`;
 		else if (code !== 0 || !final || (stop && stop !== "stop")) {
 			const why = final?.errorMessage ?? (stop && stop !== "stop" ? `stopped on ${stop}` : stderr.trim().slice(-500) || `exit ${code}`);
 			line = `BLOCKED ${name} did not finish: ${why}`;
@@ -292,12 +294,6 @@ export default function (pi: ExtensionAPI) {
 		}
 		// Taken before the test run, whose own output (__pycache__, coverage) is not the agent's work.
 		const after = before ? snapshot(ctx.cwd) : null;
-		// Cut off at the backstop, but green and with work outside localagent/: the unit is built, only
-		// the status line is missing - that is what the tests are for.
-		if (cutOff && test && before && after && builtSomething(ctx.cwd, before, after) && (await passes(ctx.cwd, test))) {
-			line = `DONE ${name} ran ${MAX_TURNS} turns without a status line, and its tests are green`;
-			error = false;
-		}
 		if (test && /^(DONE|NO STATUS)\b/.test(line)) line += tests(ctx.cwd, test);
 		line += changes(ctx.cwd, before, after);
 		line += ` · ${turns} turns, ${Math.round((Date.now() - started) / 60_000)} min`;
@@ -332,12 +328,6 @@ export default function (pi: ExtensionAPI) {
 				resolve(false);
 			});
 		});
-	}
-
-	// Whether a dispatch changed anything besides its notes under localagent/.
-	function builtSomething(cwd: string, before: string, after: string): boolean {
-		const d = spawnSync("git", ["diff", "-z", "--name-only", "--relative", before, after], { cwd, encoding: "utf8" });
-		return d.status === 0 && d.stdout.split("\0").some((f) => f && !f.startsWith("localagent/"));
 	}
 
 	// The objective gate after a DONE: the test command's verdict, a fact the orchestrator used to

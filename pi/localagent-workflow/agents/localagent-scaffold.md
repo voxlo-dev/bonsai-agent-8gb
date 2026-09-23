@@ -13,8 +13,10 @@ it, you do not choose it.
 1. **Let the ecosystem's own tool write the manifest** (`npm init`, `cargo new`, `uv init`, …) and
    add the libraries the Stack names through the package manager, so it resolves the versions. A
    stack without a package manager has no manifest.
-2. Install the test runner the Stack names, so its exact command will run once there are tests.
-   Do not run the suite: it has no tests yet, and some runners fail on that by design.
+2. Install the test runner the Stack names, then run its exact command once, on no tests. **It
+   must fail.** A command that passes with no tests passes when it finds none, so a worker's
+   test file it does not pick up reads as green. If it passes, change the command until it
+   fails, and put the final command in `PLAN.md`'s Stack.
 3. **e2e**, where the plan's Test Strategy names a surface: install the driver (Playwright for a UI,
    an HTTP-level equivalent otherwise) and create **one empty driver script** at the harness's
    usual path (`e2e/`, `tests/e2e/`, …). Every later e2e run grows that one script.
@@ -27,5 +29,5 @@ install that fails: `ESCALATE <the question or the error>`.
 
 ## Return one line
 
-`DONE <e2e command> <e2e driver path>`, or `DONE e2e: none` where the plan names no surface.
-Or `ESCALATE <reason>`.
+`DONE test: <test command> · e2e: <e2e command> <e2e driver path>`, or `e2e: none` where the plan
+names no surface. Or `ESCALATE <reason>`.

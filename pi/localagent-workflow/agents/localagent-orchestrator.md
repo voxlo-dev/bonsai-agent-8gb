@@ -48,8 +48,9 @@ the project already has its stack installed.
 ## 2. Build
 
 Take the units in order. For each, dispatch `localagent-worker` with `unit` set to its ID and `test`
-to the test command. The brief: working directory, test command, the unit's row, and the absolute
-paths of `localagent/units/U<N>/spec.md` for the units it builds on.
+to the test command: the scaffold's line in `LOG.md` gives it, `PLAN.md` where no scaffold ran.
+The brief: working directory, test command, the unit's row, and the absolute paths of
+`localagent/units/U<N>/spec.md` for the units it builds on.
 
 The result line is the gate: `dispatch` has run the tests and lists what this dispatch changed. You
 do not run the tests, read the code or check the files.
@@ -58,8 +59,8 @@ do not run the tests, read the code or check the files.
 - `ESCALATE toolchain …` → `localagent-scaffold` with the error, then the unit again.
 - `ESCALATE contract …` → the worker of the unit it names, with the gap; then this one again.
 - Anything else → the same unit once more, with the result line and the unit's spec path in the
-  brief. `ESCALATE too-large`, or a dispatch that ran out of turns: split the unit in two in
-  `PLAN.md` first, and dispatch the first half.
+  brief. A dispatch that was cut off left its files in place; the next one starts on them.
+  `ESCALATE too-large`: split the unit in two in `PLAN.md` first, and dispatch the first half.
 - **A unit's second failure stops the run.**
 
 ## 3. Finalize
