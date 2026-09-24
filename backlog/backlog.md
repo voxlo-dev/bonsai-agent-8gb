@@ -7,7 +7,7 @@ Numbers have gaps: a closed ticket's file is deleted, and a ticket that is nobod
 is named `T-NNN-{slug}.local.md`, which `.gitignore` keeps out of the repo. The counter below never
 reuses a number either way.
 
-**Next ticket: `T-034`**
+**Next ticket: `T-035`**
 
 ## Draft
 
@@ -23,6 +23,7 @@ reuses a number either way.
 - [`T-033`](T-033-kv-cache-q8-q8.md) Measure the KV cache at q8_0/q8_0 against q8_0/q4_0 — KL divergence against f16, speed at ~40k, the window it leaves on 8 GB · spike · medium · S
 - [`T-031`](T-031-sharp-chat-template.md) Measure the Qwen Sharp chat template — one plain session with `--chat-template-file`, thinking per turn and turns to result; expectation small, the delta is one terseness block · spike · low · S
 - [`T-032`](T-032-docker-server-image.md) A Dockerfile for the server, not for pi — `llama-server` in a container, pi stays on the host through `SERVER_HOST`; answers the apt-toolchain problem (T-005) and nothing about drivers, VRAM or the profile · feature · medium · M
+- [`T-034`](T-034-qwen-moe-model.md) A second model: Qwen3.6-35B-A3B with the experts in RAM — a `MODEL` axis beside `PROFILE`, the window toward 262k, measured first; the slot a Qwen 4 35B-A3B drops into · feature · medium · L
 
 ## Open source (release checklist)
 
