@@ -8,7 +8,7 @@
 
 ## Why
 
-T-016 rewrote the fork's PTQ1_0 Vulkan decode: 633 → 143 ms/token generation and 3.8 → 54 tok/s
+T-016 rewrote the fork's PTQ1_0 Vulkan decode: 633 → 143 ms/token generation and 36 → 54 tok/s
 prompt on an RX 570, bit-exact against the CPU backend. Issue
 [#185](https://github.com/PrismML-Eng/llama.cpp/issues/185) is where that belongs.
 
@@ -27,11 +27,20 @@ comment hands the measurement and the patch to the people who can, at no cost.
    under `voxlo-dev`). The patch link points at
    `main` of the public repo, so the file must stay at that path.
 2. Watch #185, #187, #188 occasionally. Answer questions with measurements, not code.
+   **2026-09-24:** the maintainer answered on #185: #238 (integer-dot mat-vec, in release
+   `842b188`) does not reach gfx803, and pointed at #252 (dedicated PTQ1_0 `mul_mat_vec`) for
+   cards without integer dot. Tested on the RX 570 (`runs/T-017-pr252-rx570/`, numbers in
+   `docs/dev.md#other-gpu-backends`): #252 matches the T-016 generation speed, so only the
+   patch's `mul_mm` half (+50 % on prompts) is still unique. The same run showed T-016's
+   prompt "before" of 3.8 tok/s was wrong (36). Comment texts for #252 and the correction on
+   #185 are in the run folder.
 3. When a pinned commit carries a decode that makes the patch unnecessary (from any of the
    three): move `LLAMA_COMMIT`, re-run the CUDA build and the RX 570 measurement
    (`runs/T-016-ptq1_0-vulkan-decode/measure.sh`), delete `patches/vulkan/`, and drop the patch
    mentions from `README.md`, `AGENTS.md` and `docs/dev.md#other-gpu-backends`. If the new
    decode is slower than 143 ms/token on the RX 570, keep the patch and rebase it instead.
+   If the pin carries #252 but not a faster `mul_mm` loader, decide whether +50 % on prompts is
+   worth keeping a patch for; if yes, cut it down to the `mul_mm` half.
 
 Not in scope: the dedicated PTQ1_0 mat-vec kernel (ceiling ~22 tok/s on the RX 570).
 `upstream-pr-body.md` and `upstream-commands.sh` in the run folder are the PR path, kept in

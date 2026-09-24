@@ -29,7 +29,7 @@ RADV_PERFTEST=nogttspill, clocks auto, q8_0/q4_0 KV, -fa on):
                      before      after
   generation, 16k    633 ms/tok  143 ms/tok   (1.58 -> 7.0 tok/s)
   generation, 48k    633 ms/tok  143 ms/tok
-  prompt, 847 tok    3.8 tok/s   54 tok/s
+  prompt, 847 tok    36 tok/s    54 tok/s
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 ---
