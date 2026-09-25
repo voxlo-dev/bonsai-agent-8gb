@@ -170,6 +170,74 @@ What decides what:
 | Hybrid prompt cache works | `again.n` small against `p40k.n` | if not: a `--ctx-checkpoints`/cache flag, or a showstopper |
 | RAM need | `rss` plus page cache: `free -m` before and after load | `MODEL_RAM_MB` |
 
+## Phase 1 — results (2026-09-24, 4060 Ti, WSL2 with 30.9 GB)
+
+Script, logs and `results.jsonl` in `runs/T-034-qwen-moe/`. Three deviations from the plan above:
+
+- **Other GGUF.** The model was already on the machine as
+  `unsloth/Qwen3.6-35B-A3B-MTP-GGUF` rev `5bc3e238d916f48a861bac2f8a1990a0e9b7e98d`,
+  `Qwen3.6-35B-A3B-UD-Q4_K_M.gguf`, 22 663 387 424 bytes, sha256
+  `0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b` (checked). Same weights plus
+  one MTP layer (`blk.40.nextn.*`), which the fork ignores and mainline can draft with. Linked
+  into `$BONSAI_HOME/models/` as `Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf`, not copied. **This file
+  replaces the pin above**: MTP is what decides fork against mainline (below).
+- **A third knob, `UB`** (`-b`/`-ub`). At the default 512, prompt processing with the experts in
+  RAM runs at ~250 tok/s; at 4096 at ~1 050, for +1.3 GB VRAM and no tg cost. `measure.sh` takes it as a
+  fourth column.
+- **Mainline** is ggml-org `8212c7802455255460ab8e18fc34754560031b34` (2026-09-24), built with
+  `build.sh`'s CUDA flags into `~/llama-mainline`. `jq` is not on the machine; the script uses
+  python3.
+
+**The VRAM edge is ~7 850 MiB, not 7 900.** WSL2 does not fail an over-allocation, it spills into
+shared memory: from ~7 900 MiB on, pp drops by half or more (262k/39/ub 4096: 7 936 MiB, pp 438).
+One expert layer costs ~470 MiB and buys ~0.8 tok/s.
+
+Fork (`1a07bfa`), q8_0 K, tg and pp in tok/s. `@43k` is a 42 803-token prompt, `@112k` 112 032.
+Repeated configs vary < 2 %:
+
+| ctx | `CPU_MOE` | V | ub | VRAM | tg @1k | tg @43k | pp @43k | tg @112k | pp @112k |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 262 144 | 40 | q4_0 | 4096 | 7 312 | 29.9 | 26.1 | 1 012 | 21.9 | 903 |
+| 262 144 | 40 | q8_0 | 2048 | 6 728 | 29.6 | 26.6 | 687 | 22.1 | 623 |
+| 262 144 | 40 | q8_0 | 4096 | 7 898 | 29.1 | 26.5 | 630 | 22.2 | 587 |
+| 262 144 | 36 | q8_0 | 512 | 7 780 | 31.2 | 27.7 | 261 | 23.4 | 246 |
+| 131 072 | 35 | q8_0 | 4096 | 7 812 | 32.0 | 28.5 | 1 090 | 23.7 | 962 |
+| 131 072 | 33 | q8_0 | 512 | 7 464 | 32.9 | 29.5 | 282 | 24.2 | 265 |
+| 65 536 | 33 | q8_0 | 4096 | 7 518 | 33.7 | 29.3 | 1 124 | – | – |
+| 65 536 | 31 | q8_0 | 512 | 7 558 | 34.4 | 30.0 | 296 | – | – |
+
+Mainline, same flags; `+mtp` is `--spec-type draft-mtp` (draft length 3, the default):
+
+| ctx | `CPU_MOE` | V | ub | VRAM | tg @1k | tg @43k | pp @43k | tg @112k | pp @112k |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 131 072 | 36 | q8_0 | 4096 | 7 540 | 29.7 | 27.7 | 1 090 | 23.5 | 947 |
+| 262 144 | 40 | q4_0 | 4096 | 7 568 | 29.1 | 25.9 | 1 017 | 22.0 | 899 |
+| 262 144 +mtp | 40 | q4_0 | 1024 | 7 396 | 40.9 | 33.0 | 409 | 30.0 | 370 |
+| 131 072 +mtp | 38 | q8_0 | 2048 | 7 374 | 42.8 | 33.6 / 46.3 | 700 | 29.5 / 27.7 | 611 |
+| 65 536 +mtp | 35 | q8_0 | 2048 | 7 380 | 40.7 | 32.2 | 734 | – | – |
+
+The corpus prompts continue C++ code, and the MTP tg there depends on what gets drafted (the two
+runs of 131k +mtp: 33.6 and 46.3). The fair number is **natural output**: three chat prompts with
+thinking, 1 024 tokens each, 131k/38/ub 2048, sampling from the model card (`chat.py`,
+`chat-results.jsonl`): **29.0 tok/s without MTP, 38.7-44.7 with**, 63-80 % of drafts accepted.
+
+What it decides:
+
+| Question | Answer |
+| --- | --- |
+| Fork or mainline | **Mainline with MTP.** Without MTP the two builds are equal (131k: tg 27.7 against 28.5 with one expert layer fewer on the card, pp the same; mainline needs ~120 MiB more VRAM). MTP adds +33-54 % tg on natural output and still +25 % at 112k context. It costs ~1.66 GB VRAM, paid in expert layers and ubatch, so pp falls to ~700 (ub 2048). The fork cannot run MTP at all |
+| Window for `dedicated` | The 15 % rule allows all of them: tg @43k is 32.2-33.6 across 65k-262k with MTP. **131 072 recommended**: q8_0/q8_0 as designed, pp 700. 262 144 needs V at q4_0 and ub 1024, which puts pp at ~400: after a compaction, 100k of kept context is re-read in ~4.5 min instead of ~3. Open for the author, see below |
+| Window for `display` | Not run with a desktop on the card. By arithmetic, 131k/+mtp at `CPU_MOE` 40, ub 2048: ~6 430 MiB, which leaves ~1 GB. Verify once |
+| Hybrid prompt cache | **Works**, on both builds: `again.n` is 4 against 42 803 every time. No extra flag |
+| Thinking in the prompt | Same as Bonsai's template: `--reasoning-preserve` renders every earlier thinking block, `--no-reasoning-preserve` only those after the last user message (`render-*.txt`). The mainline build has the same switch |
+| RAM need | RSS 20-23.5 GB for the configs above (the model is mmapped), and MemAvailable fell by 2-3 GB over the page cache during the run. **`MODEL_RAM_MB` ~24 000**, so preflight should ask for `MemTotal` >= ~28 GB. 30.9 GB was enough with ~25 GB still available |
+
+Config for phase 2 (`dedicated`), unless the author picks 262k:
+`LLAMA_REPO` ggml-org, `LLAMA_COMMIT` `8212c78`, own `LLAMA_DIR`, no `PATCH_SET`;
+`-c 131072 -ngl 99 --fit off --n-cpu-moe 38 -fa on -ctk q8_0 -ctv q8_0 -b 2048 -ub 2048
+--spec-type draft-mtp`, so `CPU_MOE` 38 and `UB` 2048 in the profile. Not tried: draft length other than
+3, `-ub 1536`/`3072` between the measured points, MTP at `CPU_MOE` 37 (~7 840 MiB, on the edge).
+
 ## Phase 2 — the config split (here, no GPU needed; one commit per change)
 
 1. Move `profiles/*.env` to `profiles/bonsai/`, add `models/bonsai.env`, `MODEL` in
@@ -218,7 +286,10 @@ and the result is still broken, that is the answer on this model, and the slot w
 
 ## Open for the author
 
-- **RAM on the 4060 Ti PC** and WSL2's `memory=` there. At 64 GB `UD-Q4_K_XL` is the pin; at 32 GB
-  it is tight beside Windows and `UD-IQ4_XS` becomes the default.
+- ~~RAM on the 4060 Ti PC~~: WSL2 sees 30.9 GB, and the 22.7 GB `UD-Q4_K_M` runs with ~25 GB
+  still available. `UD-IQ4_XS` is not needed here.
+- **131k or 262k for `dedicated`.** Same tg; 262k costs V at q4_0 and prompt speed (~400 against
+  ~700 tok/s). Phase 1 recommends 131k; phase 3 at 131k would show whether the window still
+  compacts at all.
 - **Whether `qwen36-35b` ships as a supported model or stays a branch** until Qwen 4 exists.
   The config split is worth keeping either way; the Qwen files could wait.
