@@ -4,7 +4,7 @@
 - **Category:** feature
 - **Importance:** medium
 - **Effort:** L (M for the measurement, M for the config split, S for the docs)
-- **Depends on:** a machine with the 4060 Ti and >= 32 GB RAM visible to WSL2 for phases 1 and 3. Touches every file T-033 touches (`KV_V`, the profiles): whichever lands second rebases
+- **Depends on:** a machine with the 4060 Ti and >= 32 GB RAM visible to WSL2 for phases 1 and 3. T-035 measures Bonsai the same way; its profile changes land in the `profiles/bonsai/` this ticket creates
 
 ## Why
 

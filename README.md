@@ -85,7 +85,7 @@ that table has no row for. This repo exists to make it usable.
 **What is measured and what is not.** The speed numbers here are reproducible from this repo. The
 claim that Bonsai closes the quality gap is **not measured yet**: no Bonsai run exists in the
 comparison table, and the run that would put it there is
-[T-027](backlog/T-027-quality-evidence.md). Until then this repo claims interactive speed for a
+[T-035](backlog/T-035-bonsai-measured.md). Until then this repo claims interactive speed for a
 dense 27B on 8 GB, and nothing about beating other models.
 
 ## Requirements

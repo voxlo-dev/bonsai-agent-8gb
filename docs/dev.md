@@ -111,7 +111,7 @@ matrix takes. coopmat2 is deliberately absent for PTQ1_0 and is NVIDIA-only anyw
 
 | | RX 570, shipped kernel | RX 570, T-016 decode | RTX 4060 Ti / CUDA |
 | --- | --- | --- | --- |
-| prompt processing | 3.8 tok/s | 54 tok/s (847-token prompt) | 451 tok/s |
+| prompt processing (847 tokens) | 36 tok/s | 54 tok/s | 451 tok/s |
 | generation | 1.58 tok/s (633 ms/token) | 7.0 tok/s (143 ms/token) | 36 tok/s |
 
 **The kernel was the ceiling, and the decode was the kernel.** `ptq1_0.glsl` as shipped
@@ -138,7 +138,7 @@ against the CPU backend, before and after. What it bought, 16k and 48k identical
 | Path | before | after | Gain |
 | --- | --- | --- | --- |
 | generation (`mul_mat_vec`) | 632.96 ms/token | 142.56 ms/token | 4.4x |
-| prompt, 847 tokens (`mul_mm`) | 3.8 tok/s | 54.0 tok/s | 14x |
+| prompt, 847 tokens (`mul_mm`) | 36.0 tok/s | 54.0 tok/s | 1.5x |
 
 Two things the numbers say about what is left. The memory clock now ramps on its own (1000 to
 1750 MHz during generation, where the shipped kernel sat at 300), so the kernel has become
@@ -148,6 +148,32 @@ efficiency would allow, so it is not bandwidth-bound yet. The remaining ALU cost
 bytes, so every byte is loaded and looked up five times per token. A dedicated PTQ1_0 mat-vec
 kernel that keeps all five trits of a loaded word (the way the K-quant `mul_mat_vec_*` shaders
 own their block layout) is the next step, and a larger one; the ceiling for it is ~22 tok/s.
+
+**Correction (T-017, 2026-09-24).** T-016 first printed the prompt gain as 3.8 → 54 tok/s,
+14x. The 3.8 was the 18-token prompt of the generation request, not a long prompt: T-016 never
+measured the shipped kernel on the 847-token one. Measured at the fork's `842b188` (whose
+PTQ1_0 `mul_mm` path is unchanged from the pin), the shipped kernel does 36.0 tok/s there, so
+the decode is worth 1.5x on prompts. The tables above carry the corrected value; the
+generation numbers stand.
+
+**Upstream, [#252](https://github.com/PrismML-Eng/llama.cpp/pull/252) is the generation half
+of this, done properly.** The fork's `842b188` release carries an integer-dot mat-vec (#238),
+which gfx803 cannot use (`int dot: 0`). #252, open, adds the dedicated PTQ1_0 `mul_mat_vec`
+shader described above as the next step. On the RX 570, 16k, same flags as T-016
+(`runs/T-017-pr252-rx570/`), all four builds on `842b188`:
+
+| Build | generation | prompt, 847 tokens | `llama-bench` tg128 / pp512 |
+| --- | --- | --- | --- |
+| `842b188` | 633.4 ms/token | 36.0 tok/s | 1.58 / 42.6 |
+| + #252 | 141.6 ms/token | 39.8 tok/s | 7.15 / 42.4 |
+| + T-016 patch | 143.9 ms/token | 53.8 tok/s | 6.99 / 59.1 |
+| + #252 + T-016 patch | 141.4 ms/token | 53.9 tok/s | 7.15 / 59.1 |
+
+`test-backend-ops -b Vulkan0 -p ptq1_0` passes `MUL_MAT`, `MUL_MAT_ID` and `GET_ROWS` in all
+four (140 + 83 + 4). #252 reaches the same generation speed as the T-016 decode, slightly ahead,
+and stays at the same ~3x off the ~45 ms roofline, so the remaining cost is not in the trit
+decode. What only the T-016 patch still adds is the `mul_mm` loader: +40-50 % on prompts. The two
+compose without conflict (the patch needs `git am -3` on `842b188` for context in `types.glsl`).
 Polaris has no integer-dot instruction, so the `mul_mat_vecq` route is not available here.
 
 **The environment is worth 1.76x on the shipped kernel, and getting it wrong looks like a kernel

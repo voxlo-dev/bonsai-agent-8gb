@@ -305,7 +305,7 @@ repo exists to make that combination usable and to find out whether it actually 
 
 **That question is open.** Nothing in this document was measured with Bonsai. The comparison run -
 Bonsai through the same harness, with the same prompt, on the same card class, more than once - is
-ticket T-027 and has not been done. Until it is, the honest claim is that the repo puts a dense
+ticket T-035 (formerly T-027) and has not been done. Until it is, the honest claim is that the repo puts a dense
 27B into interactive speed on 8 GB, not that it beats the table.
 
 ## Citation

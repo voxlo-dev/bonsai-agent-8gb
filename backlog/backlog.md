@@ -7,7 +7,7 @@ Numbers have gaps: a closed ticket's file is deleted, and a ticket that is nobod
 is named `T-NNN-{slug}.local.md`, which `.gitignore` keeps out of the repo. The counter below never
 reuses a number either way.
 
-**Next ticket: `T-035`**
+**Next ticket: `T-036`**
 
 ## Draft
 
@@ -20,7 +20,6 @@ reuses a number either way.
 - [`T-008`](T-008-vram-scaling.md) Measure context per VRAM size and with a shared display — derive CTX and the pi budget from free VRAM · decision · medium · M
 - [`T-015`](T-015-context-safety-tokens.md) Decide whether to shrink pi's 4096-token safety margin — patch, upstream or leave · decision · low · S
 - [`T-017`](T-017-upstream-ptq1_0-vulkan-patch.md) Hand the PTQ1_0 Vulkan decode to the fork’s #185 — a comment with the measurement and the patch link, not a PR (two PRs were ahead, and the fork’s rules need an author who can defend every line); drop `patches/vulkan/` once a pin carries an equivalent · chore · medium · S
-- [`T-033`](T-033-kv-cache-q8-q8.md) Measure the KV cache at q8_0/q8_0 against q8_0/q4_0 — KL divergence against f16, speed at ~40k, the window it leaves on 8 GB · spike · medium · S
 - [`T-031`](T-031-sharp-chat-template.md) Measure the Qwen Sharp chat template — one plain session with `--chat-template-file`, thinking per turn and turns to result; expectation small, the delta is one terseness block · spike · low · S
 - [`T-032`](T-032-docker-server-image.md) A Dockerfile for the server, not for pi — `llama-server` in a container, pi stays on the host through `SERVER_HOST`; answers the apt-toolchain problem (T-005) and nothing about drivers, VRAM or the profile · feature · medium · M
 - [`T-034`](T-034-qwen-moe-model.md) A second model: Qwen3.6-35B-A3B with the experts in RAM — a `MODEL` axis beside `PROFILE`, the window toward 262k, measured first; the slot a Qwen 4 35B-A3B drops into · feature · medium · L
@@ -32,9 +31,9 @@ disclaimer, acknowledgements, the experimental label on the localagent workflow,
 UX with `scripts/preflight.sh`.
 
 Public since 2026-09-21 at <https://github.com/voxlo-dev/bonsai-agent-8gb>, tagged `v0.1.0`.
-Remaining order: T-027 → T-017 comment posted. T-020 and T-029 follow the reports and the upstream merge.
+Remaining order: T-035 → T-017 comment posted. T-020 and T-029 follow the reports and the upstream merge.
 
 - [`T-020`](T-020-supported-hardware.md) Finish the hardware table — 12/16 GB profiles and the rows that hardware reports bring in; the three tiers are already in the README · decision · medium · M
 - [`T-024`](T-024-public-repo-setup.md) Public repo setup — done except confirming the two issue templates render · chore · low · S
-- [`T-027`](T-027-quality-evidence.md) Put the quality claim on the record — one Bonsai run through OpenCode with the study's prompt, twice, so it joins the comparison table · spike · high · M
+- [`T-035`](T-035-bonsai-measured.md) Measure Bonsai the way T-034 measures Qwen — the window beyond 64k (`q4_0`/`q4_0`, KV in RAM), KV quality against f16, and the study-harness run twice for the quality claim; was T-027 and T-033 · spike · high · M
 - [`T-029`](T-029-upstream-watch.md) Watch mainline — move off the fork when ggml-org takes PTQ1_0 (#29077), keep the Vulkan patch alive · decision · medium · M
