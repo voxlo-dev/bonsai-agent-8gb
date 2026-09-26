@@ -121,6 +121,58 @@ What each row answers:
 | `-nkvo` rows | whether KV in RAM is usable at all: `tg` at 40k and 100k against the on-card rows |
 | `again.n` everywhere | the hybrid prompt cache is reused (small), or a turn reprocesses everything |
 
+## Phase 1 — results (2026-09-25/26, 4060 Ti, fork `1a07bfa`)
+
+Script, logs and `results.jsonl` in `runs/T-035-bonsai-measured/`. One pass, not three: the run was
+stopped after 3 h, most of it spent in configs that spill (below). T-034's repeats varied < 2 %,
+so single differences larger than that count. Deviations from the plan: python3 instead of `jq`
+(not on the machine), a port check instead of `pgrep -f`, and a `p90k` prompt (93 392 tokens)
+for the 96k-112k windows, where the 112k prompt does not fit.
+
+**The edge is not visible in the VRAM reading.** WSL2 does not fail an over-allocation, it spills
+into shared memory, and it does so **only once the cache fills**: 104k `q4_0`/`q4_0` reads
+prompts at a normal 416 tok/s at 43k and at 27 tok/s at 92k. `nvidia-smi` shows ~7 935 MiB for every config near
+the edge, so the only test is pp at depth. `measure.sh` now caps each request (`MAX_TIME`, 900 s)
+because of this.
+
+tg and pp in tok/s; `@43k` is a 42 803-token prompt, `@92k` 93 392, `@112k` 112 032:
+
+| ctx | K/V | VRAM | tg short | tg chat | tg @43k | pp @43k | tg @92k | pp @92k | |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 64 000 | q8_0/q4_0 | 7 758 | 35.7 | 35.6 | 25.7 | 415 | – | – | reference, reproduces |
+| 48 000 | q8_0/q8_0 | 7 652 | 33.7 | 35.5 | 26.4 | 413 | – | – | |
+| 52 000 | q8_0/q8_0 | 7 808 | 34.8 | 35.6 | 26.4 | 414 | – | – | largest q8_0/q8_0 that is clean |
+| 56 000 | q8_0/q8_0 | 7 940 | 33.5 | 33.2 | 25.0 | 414 | – | – | at the edge, tg already down |
+| 60 000 | q8_0/q8_0 | 7 940 | 32.6 | 33.0 | 24.9 | 181 | – | – | spills |
+| 96 000 | q4_0/q4_0 | 7 932 | 33.5 | 33.1 | 24.3 | 416 | 18.5 | 355 | **largest window on the card** |
+| 100 000 | q4_0/q4_0 | – | – | – | – | – | – | 170 → 125 | spills from ~80k on; stopped |
+| 104 000 | q4_0/q4_0 | 7 940 | 35.8 | 35.5 | 25.6 | 416 | 19.4 | 27 | spills at depth |
+| 108 000 | q4_0/q4_0 | 7 932 | 33.0 | 32.9 | 24.3 | 124 | 18.5 | 15 | spills |
+| 112 000 | q4_0/q4_0 | 7 934 | 33.2 | 32.9 | 24.3 | 28 | 16.6 | 9 | spills |
+| 131 072 | q8_0/q8_0 `-nkvo` | 6 594 | 11.7 | 10.9 | 3.7 | 349 | – | – | tg @112k 1.8 |
+| 262 144 | q8_0/q8_0 `-nkvo` | 7 506 | 11.7 | 11.0 | 3.7 | 349 | – | – | tg @112k 1.8 |
+
+`again.n` is 4 against 42 803 in every row: the hybrid prompt cache is reused on all KV types
+and with `-nkvo`.
+
+What it answers:
+
+| Question | Answer |
+| --- | --- |
+| Reference state | Reproduced: 35.7 short, 25.7 at 43k |
+| Same-type kernel faster (T-033)? | **Barely.** `q8_0`/`q8_0` at 48k-52k: tg @43k 26.4 against 25.7 (+2.7 %), short and chat the same or lower. The ~13 % gap in performance.md is not the mixed-type kernel. It costs 12k of window (64k → 52k) |
+| Largest window on the card | **96 000 at `q4_0`/`q4_0`**, 50 % more than today. Decode at depth: 24.3 at 43k (-5 % against the reference), 18.5 at 92k. 100k and up spill once the cache fills |
+| KV in RAM (`-nkvo`) | **Out.** 11.7 tok/s short, 3.7 at 43k, 1.8 at 112k: the 16 attention layers on the CPU cost two thirds at any depth. Not within 15 %, not shipped |
+| Hybrid prompt cache | Reused everywhere |
+
+Beside T-034: Qwen3.6 with MTP decodes 33.6 at 43k and 29.5 at 112k in a 131k window, Bonsai 25.7 at 43k
+in 64k, or 24.3 at 43k and 18.5 at 92k in 96k. Bonsai is faster only against Qwen without MTP, and
+only at short context (35.7 against ~30); with MTP Qwen is ahead at every depth (~41 short).
+
+Not measured: passes 2 and 3; 96k at a full cache (~95k), where a spill would show; 92k-100k
+between the clean and the spilling point. Before a 96k profile ships, one run of 96k with a
+~95k prompt settles the first two. Whether `q4_0`/`q4_0` is worth it is phase 2's question.
+
 ## Phase 2 — quality of the KV types (4060 Ti, ~1 h; was T-033)
 
 **2a. KL divergence against an f16 cache, one 16k chunk.** 16k of `f16` cache is 1 GiB and fits
