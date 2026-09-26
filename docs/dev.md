@@ -302,7 +302,9 @@ throughout, which is why guest-wide usage peaked at 15.1 GB while the build itse
 | KV cache, per 1k tokens, `q8_0`/`q8_0` | 34 |
 | KV cache, per 1k tokens, `q8_0`/`q4_0` | 26 |
 
-At 48k context with `q8_0`/`q4_0` the process holds ~7.3 GB of 8 GB. **64k is the default**: measured at 7 747 MiB of 8 188, 36 tok/s at short context and no layer on the CPU - 441 MiB to spare, which is why the GPU must drive no display. 80k does not fit.
+At 48k context with `q8_0`/`q4_0` the process holds ~7.3 GB of 8 GB. **64k is the default**: measured at 7 747 MiB of 8 188, 36 tok/s at short context and no layer on the CPU - 441 MiB to spare, which is why the GPU must drive no display.
+
+**More than 64k only through the cache type**: 96k fits at `q4_0`/`q4_0` (18 MiB per 1k) and reads that depth cleanly, and nothing larger stays on the card. Under WSL2 a window that is too large does not fail to load. It spills into shared memory once the cache fills, and the VRAM reading does not show it. The measurements, and how to test a window at depth, are in [context-window.md](context-window.md). The second model, `MODEL=qwen36-35b`, has its own budget with the experts in RAM: [qwen.md](qwen.md).
 
 **Display on the iGPU.** When the RTX also drives the Windows desktop, the desktop takes 0.5 to 1.2 GB and competes for GPU time. With the monitor on the mainboard (iGPU enabled in BIOS, browsers set to "Power saving" under Windows *Settings → System → Display → Graphics*), generation went from 21 to 34 tok/s in the same browser-based session.
 
@@ -310,7 +312,7 @@ At 48k context with `q8_0`/`q4_0` the process holds ~7.3 GB of 8 GB. **64k is th
 
 ## KV cache
 
-Keys are more sensitive to quantization than values, so K stays at `q8_0` and V drops to `q4_0`. This saves ~25 % of the KV cache compared with `q8_0`/`q8_0`. llama.cpp has no `q6` cache type. The options are `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0` and `iq4_nl`. A quantized V cache requires flash attention (`-fa on`).
+K at `q8_0` and V at `q4_0`, measured against an `f16` cache: 99.66 % same top token at 16k (99.83 % for `q8_0`/`q8_0`), and identical to `f16` on 510 of 512 tokens at 92k. There is no quality case against it, and `q8_0`/`q8_0` is not faster either (+2.7 % at 43k, for 12k less window). It saves ~25 % of the cache compared with `q8_0`/`q8_0`. Qwen3.6's cache is 3-33x more sensitive than Bonsai's and stays at `q8_0`/`q8_0`. Both are in [context-window.md](context-window.md#kv-cache-quality). llama.cpp has no `q6` cache type; `q5_0` is several times slower on the fork (PrismML-Eng/llama.cpp#191). The options are `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0` and `iq4_nl`. A quantized V cache requires flash attention (`-fa on`).
 
 ## Reasoning
 
@@ -368,7 +370,7 @@ The settings below keep the post-compaction state comfortably under the trigger 
 worst case inside the window. `install.sh pi` writes the two compaction keys into
 `$BONSAI_HOME/pi-agent/settings.json`.
 
-Because these five constrain each other, they live in `profiles/*.env` and move together.
+Because these five constrain each other, they live in a profile, `profiles/$MODEL/$PROFILE.env`, and move together.
 `PROFILE=dedicated` (default) is the 64k window below. `PROFILE=display` is the 48k set the
 measurements above were taken with - `CTX` 48000, `BUDGET` 4096, `MAX_TOKENS` 12000,
 `RESERVE_TOKENS` 12000, `KEEP_RECENT_TOKENS` 8000 - for a GPU that also renders a desktop
