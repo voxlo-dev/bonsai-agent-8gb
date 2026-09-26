@@ -22,6 +22,14 @@
     file;
   - pi gets a config dir per model;
   - `bonsai-pi` names the model a foreign server on `PORT` serves.
+  - **Checked on the RX 570** (2026-09-27): the same identity check on the box's bash. Then
+    `build` with the new `PATCH_DIR`: the patch applies and the build finishes (99 % ccache hits); a
+    second run says "already built". `bonsai-server` from the new tree at 64k: 141.6 ms/token (7.06 tok/s),
+    847-token prompt at 54.4 tok/s, VRAM 7 399 MiB. That is T-016's numbers.
+    `MODEL=qwen36-35b` on `vulkan` fails preflight, as it should. The rebuild itself was not the
+    refactor's doing: `build`'s stamp hashes the whole patch file, header included, so `eba5f7b`'s
+    correction of a number in the patch's commit message rebuilt identical code once. `git patch-id
+    --stable` would hash only the diff; not worth another forced rebuild now.
 
   Differences from the plan: the patches stay at `patches/$BACKEND`, and Bonsai's model file names
   them in `PATCH_DIR`, instead of a move to `patches/prism/`. There is no `OFFLOAD` variable:
