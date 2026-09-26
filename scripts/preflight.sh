@@ -35,7 +35,7 @@ else
 fi
 
 # --- model ------------------------------------------------------------------
-# A model file names the backends it was measured on; Qwen's experts-in-RAM setup only on CUDA.
+# A model file names the backends it was measured on.
 case " $MODEL_BACKENDS " in
   *" $BACKEND "*) ;;
   *) hard "model: MODEL=$MODEL is measured on ${MODEL_BACKENDS// /, } only, not $BACKEND - see docs/qwen.md" ;;
@@ -44,7 +44,8 @@ esac
 # --- disk -------------------------------------------------------------------
 need_home=0
 runs build && need_home=$((need_home + 2000))
-runs model && need_home=$((need_home + MODEL_DISK_MB))
+# A model already in place needs nothing more; model.sh finds it and stops.
+runs model && [[ ! -f "$MODEL_PATH" ]] && need_home=$((need_home + MODEL_DISK_MB))
 runs pi    && need_home=$((need_home + 500))
 if ((need_home > 0)); then
   have="$(free_mb "$BONSAI_HOME")"
@@ -73,12 +74,13 @@ if [[ -z "$avail_mb" || -z "$total_mb" ]]; then
 elif ((MODEL_RAM_MB > 0)); then
   # A MoE keeps its experts in RAM for as long as it serves, so the ceiling is MemTotal: under
   # WSL2 that is half the Windows RAM unless .wslconfig says otherwise. See docs/qwen.md.
-  need_ram=$((MODEL_RAM_MB + 4000))
+  need_ram=$((MODEL_RAM_MB + 2000))
   wslhint=""; grep -qi microsoft /proc/version 2>/dev/null \
     && wslhint=" - WSL2 sees half the Windows RAM by default: raise memory= in %UserProfile%\\.wslconfig, then wsl --shutdown"
   if ((total_mb < need_ram)); then
     hard "RAM: ${total_mb} MB in total, $MODEL holds ~${MODEL_RAM_MB} MB in RAM while serving and needs ~${need_ram} MB$wslhint"
-  elif ((avail_mb < MODEL_RAM_MB)); then
+  elif ((avail_mb < MODEL_RAM_MB - 4000)); then
+    # Most of what it holds is the mmapped experts as page cache, which counts as available.
     soft "RAM: ${avail_mb} of ${total_mb} MB available, $MODEL holds ~${MODEL_RAM_MB} MB while serving - close something before starting it"
   else
     pass "RAM: ${avail_mb} of ${total_mb} MB available, $MODEL holds ~${MODEL_RAM_MB} MB"
