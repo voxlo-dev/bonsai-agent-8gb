@@ -37,11 +37,12 @@
   also what Qwen used for its own agent benchmarks.
 
 - **Qwen on the RX 570** (2026-09-27, VM raised to 28 GB): 17.9-27.9 tok/s, 2.5-3.5x Bonsai there,
-  up to 131k with MTP. The open catch is that repeated requests on one cache slow down (20.7 → 16.0
-  at 32k, 18.8 → 7.8 at 131k), with buffers moving from VRAM to GTT. See
+  up to 131k with MTP. Repeated requests on one cache slowed down (20.7 → 16.0 at 32k, 18.8 → 7.8
+  at 131k). T-036 found the cause and fixed it with `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM`, and
+  gave Vulkan its own profile. See
   [qwen.md](../docs/qwen.md#on-the-rx-570-vulkan). Preflight now lets `vulkan` through, and
   its RAM threshold is 26 000 MB, not 28 000, because a 28 GB VM reports 27.4 GB.
-  **Follow-up:** [T-036](T-036-qwen-vulkan-repeat-slowdown.md), the cause of the repeat slowdown, then a Vulkan profile.
+  **Follow-up:** T-036, closed: now 22.4-22.8 tok/s on every request at 131k.
 
 ## Before phase 3, on the 4060 Ti
 

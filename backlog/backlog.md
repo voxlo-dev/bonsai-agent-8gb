@@ -7,7 +7,7 @@ Numbers have gaps: a closed ticket's file is deleted, and a ticket that is nobod
 is named `T-NNN-{slug}.local.md`, which `.gitignore` keeps out of the repo. The counter below never
 reuses a number either way.
 
-**Next ticket: `T-037`**
+**Next ticket: `T-038`**
 
 ## Draft
 
@@ -23,7 +23,7 @@ reuses a number either way.
 - [`T-031`](T-031-sharp-chat-template.md) Measure the Qwen Sharp chat template — one plain session with `--chat-template-file`, thinking per turn and turns to result; expectation small, the delta is one terseness block · spike · low · S
 - [`T-032`](T-032-docker-server-image.md) A Dockerfile for the server, not for pi — `llama-server` in a container, pi stays on the host through `SERVER_HOST`; answers the apt-toolchain problem (T-005) and nothing about drivers, VRAM or the profile · feature · medium · M
 - [`T-034`](T-034-qwen-moe-model.md) A second model: Qwen3.6-35B-A3B with the experts in RAM — measured and built (`MODEL=qwen36-35b`, 131k, MTP on mainline); left: one agent session, the `display` check, supported or experimental; the slot a Qwen 4 35B-A3B drops into · feature · medium · S
-- [`T-036`](T-036-qwen-vulkan-repeat-slowdown.md) Qwen3.6 on the RX 570: find why repeated requests on one cache slow down (20.7 → 16.0 at 32k, 18.8 → 7.8 at 131k, buffers to GTT) — MTP, checkpoints, prompt cache isolated, an op breakdown, then a Vulkan profile or a kernel ticket · spike · medium · S
+- [`T-037`](T-037-moe-cpu-threads.md) Threads for the experts in RAM — `-t 7` of 8 vCPUs is ~10 % faster on the RX 570 box; measure on the 4060 Ti, then a `THREADS` setting, a cores-minus-one default, or nothing · spike · low · S
 
 ## Open source (release checklist)
 

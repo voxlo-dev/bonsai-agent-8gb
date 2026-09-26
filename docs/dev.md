@@ -224,7 +224,10 @@ supported and not the default. How the setup does it, all of it measured above:
   pinned `LLAMA_COMMIT` does not carry the decode until upstream takes it (T-017). Same
   binary flags otherwise, same KV types, same `-fa on`.
 - `bonsai-server` exports `RADV_PERFTEST=nogttspill` (1.22x; needs Mesa >= 25.2, `deps` warns
-  below that). Nothing forces the clocks: with the new decode `mclk` ramps by itself, and the
+  below that), and `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM=1`. That one is neutral for Bonsai
+  (143.81 vs 144.07 ms/token at 64k) and 2.3x on Qwen's repeated requests, whose checkpoint writes
+  otherwise push buffers out of the 256 MiB of CPU-visible VRAM
+  ([qwen.md](qwen.md#on-the-rx-570-vulkan)). Nothing forces the clocks: with the new decode `mclk` ramps by itself, and the
   knob needs root anyway.
 - The `dedicated` profile holds as is: 64k measured at 7 434 MiB of 8 192 on the RX 570,
   141.56 ms/token (`runs/T-016-ptq1_0-vulkan-decode/measure-new-64k.out`), so the window
@@ -617,6 +620,7 @@ be gone by the time this one starts. See [VRAM budget](#vram-budget).
 | `stopReason: length` well below `MAX_TOKENS`, near a compaction | pi's output clamp: `BUDGET` too large for `RESERVE_TOKENS - 4096`. See [Context budget](#context-budget). |
 | pi compacts every turn, most of the time goes into summarizing | `RESERVE_TOKENS`/`KEEP_RECENT_TOKENS` are unset or too large for `CTX`: `./install.sh pi`. See [Context budget](#context-budget). |
 | Vulkan: ~1.2x below the numbers here, GTT above 400 MiB at 16k | Mesa < 25.2: `RADV_PERFTEST=nogttspill` is ignored. `deps` warns; take `mesa-vulkan-drivers` from backports. See [Other GPU backends](#other-gpu-backends). |
+| Vulkan, Qwen: the first request fast, every later one on the same cache ~2x slower, GTT grows | `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM` is unset, e.g. a server started by hand rather than through `bonsai-server`. See [qwen.md](qwen.md#on-the-rx-570-vulkan). |
 | Vulkan: VRAM reads a few MiB right after load | Normal. RADV moves the weights into VRAM on the first request. Judge by tok/s, and read VRAM and GTT together. |
 | Vulkan: ~2x slower, VRAM ~20 MiB, GTT ~6 GB | `GGML_VK_PREFER_HOST_MEMORY` is set. It is checked for presence, so `=0` also turns it on: unset it. |
 | `vulkaninfo` lists no device, `deps` dies on it | Your user is not in the `render` group: `usermod -aG render $USER`, log in again. |

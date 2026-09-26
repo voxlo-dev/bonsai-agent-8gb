@@ -139,17 +139,67 @@ a better home for the window, MTP (+20-30 %, 63-75 % accepted) and the ubatch (p
 than for experts. RSS was 16.7-21.4 GB, and `MemAvailable` stayed above 22 GB, because the
 mmapped experts count as page cache.
 
-**At depth, and the catch.** At 131k with MTP, a 32 781-token prompt is read at 120 tok/s and then
-generates at 18.8 tok/s. That is clean, with no spill. **The next request on the same cache
-generates at 7.8 tok/s**, and GTT grows from 1.5 to 2.2 GB while VRAM shrinks. At a 32k window the
-same pattern is milder: 20.7 on the first request, 16.0 on each repeat, with ~250 MB moving from
-VRAM to GTT after the first. An agent session is nothing but repeats on one cache, so the lower
-numbers are the ones pi would see. The cause is open: RADV migrating buffers, or mainline's
-hybrid-state checkpoints, are the candidates. Until it is found, a small window is the safer
-choice on this card, and even its repeat speed is over twice Bonsai's.
+**At depth, and the repeat slowdown (T-036, fixed).** At 131k with MTP, a 32 781-token prompt was
+read at 120 tok/s and then generated at 18.8 tok/s, and **the next request on the same cache at
+7.8**, with GTT growing from 1.5 to 2.2 GB while VRAM shrank. An agent session is nothing but
+repeats on one cache. The cause is where llama.cpp puts small buffers on a card without Resizable
+BAR, and one environment variable removes it. Measured 2026-09-26, T-034's ~25k-token prompt three
+times on one cache (`cache_prompt`, 128 tokens, greedy), `CPU_MOE` 40, ub 2048, q8_0/q8_0;
+scripts and logs in `runs/T-036-qwen-vulkan-repeat/`:
 
-No profile is written for Vulkan yet. The `cuda` profiles would load on this card, since VRAM
-is not the limit, but the repeat slowdown should be understood first.
+| Run | ctx | tg 1st | tg 2nd | tg 3rd | VRAM → GTT after the 1st |
+| --- | --- | --- | --- | --- | --- |
+| MTP | 32k | 21.96 | 16.20 | 16.40 | 251 MiB |
+| no MTP | 32k | 16.15 | 16.33 | 16.56 | – |
+| MTP, `--ctx-checkpoints 0` | 32k | 23.55 | 23.47 | 23.10 | – (but every request re-reads the prompt: 190 s) |
+| MTP, `--cache-ram 0` | 32k | 21.94 | 12.98 | 12.60 | 252 MiB |
+| MTP, `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM=1` | 32k | 22.06 | 21.87 | 22.32 | – |
+| MTP | 131k | 22.34 | 9.89 | 9.94 | 508 MiB |
+| MTP, `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM=1` | 131k | 22.67 | 22.83 | 22.42 | – |
+
+- **The mechanism.** The RX 570 has 256 MiB of CPU-visible VRAM. Mainline's Vulkan backend asks
+  for device-local *and* host-visible memory first ("use rebar if available") and writes such
+  buffers with a plain CPU `memcpy` through the mapping. Checkpoints of the hybrid model's
+  recurrent state are saved and restored that way, and with MTP on every draft step. Once
+  the host keeps writing into VRAM it cannot see, the kernel moves those buffers to GTT, and every
+  token reads them across PCIe from then on. Without MTP there are no per-step checkpoints and no
+  drop; without checkpoints there is no drop, but no prefix reuse either.
+- **The fix.** `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM=1` allocates device-local only, and writes go
+  through a staging copy. Prefix reuse stays intact (`prompt_n` 4 on each repeat), nothing moves,
+  and at 131k the repeat is **2.3x** faster. `bonsai-server` sets it for every `vulkan` run:
+  Bonsai measures the same with it (143.81 vs 144.07 ms/token and 53.5 vs 53.7 tok/s on the
+  847-token prompt at 64k), since it has no recurrent state to checkpoint. On a card with
+  Resizable BAR, all of VRAM is CPU-visible, so this problem should not occur there. It is not
+  measured.
+- **Through `bonsai-server`**, with the profile below and normal sampling: 21.5, 20.3 and 20.2 tok/s
+  at 131k, VRAM and GTT unchanged across the three requests.
+
+**Where a token's time goes.** One generated token at 25k depth, 32k window, no MTP, 62 ms: 35 ms
+of it are GPU kernels (`GGML_VK_PERF_LOGGER`; on `8212c78` it trips an assert in
+`graph_compute` when an async upload is pending, so it was measured with that assert removed in a
+throwaway binary). The rest goes to the experts on the CPU and to the ~41 CPU/GPU handoffs a token
+makes with every expert in RAM. Of the GPU time, the attention, SSM and shared-expert weights
+(`MUL_MAT_VEC q8_0`) take 35 % at ~165 GB/s, about three quarters of the card's bandwidth.
+FlashAttention over the q8_0 cache takes 18 %, and that share grows with depth. The output head
+(`q6_K`) takes 7 %, and the Gated DeltaNet kernel 3 %. **No op dominates, so no kernel ticket
+follows.** The knobs tried around it:
+
+- **An f16 cache is slower**, not faster: 15.5 against 16.6 tok/s at 25k depth. The attention is
+  bandwidth-bound on this card too, so q8_0 stays.
+- **One CPU thread fewer is worth ~10 %.** With every expert in RAM, 8 threads on the VM's 8 vCPUs
+  compete with the thread that drives the GPU. A 256-token turn without MTP: `-t 8` 17.2 and
+  17.1, `-t 7` 18.9 and 19.0, `-t 6` 19.0 and 17.9, `-t 5` 19.4, `-t 4` 18.8. Not a default: it is
+  one VM's core count, and the 4060 Ti machine, where Qwen is bounded by RAM, may well behave
+  similarly. That is [T-037](../backlog/T-037-moe-cpu-threads.md). Until then, pass `-t` to
+  `bonsai-server` by hand.
+- **`--load-mode none`**, which llama.cpp suggests for experts in RAM, loses the Vulkan device while
+  loading (`ErrorDeviceLost`) on this card. It stays on mmap.
+
+**The Vulkan profile.** `profiles/qwen36-35b/dedicated-vulkan.env` is read before `dedicated.env`
+and only sets `CPU_MOE` to 40. More expert layers on the card buy 9 % at most. At 131k with
+every expert in RAM, 6 GB of VRAM are in use, leaving ~2 GB free. The window stays at 131k.
+`display` already has `CPU_MOE` 40 and needs no override. Any `$PROFILE-$BACKEND.env` works the
+same way, and Bonsai has none because its 64k fits both cards.
 
 ## When Qwen 4 lands
 
