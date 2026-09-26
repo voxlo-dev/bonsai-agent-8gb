@@ -226,17 +226,64 @@ What it decides:
 | Question | Answer |
 | --- | --- |
 | Fork or mainline | **Mainline with MTP.** Without MTP the two builds are equal (131k: tg 27.7 against 28.5 with one expert layer fewer on the card, pp the same; mainline needs ~120 MiB more VRAM). MTP adds +33-54 % tg on natural output and still +25 % at 112k context. It costs ~1.66 GB VRAM, paid in expert layers and ubatch, so pp falls to ~700 (ub 2048). The fork cannot run MTP at all |
-| Window for `dedicated` | The 15 % rule allows all of them: tg @43k is 32.2-33.6 across 65k-262k with MTP. **131 072 recommended**: q8_0/q8_0 as designed, pp 700. 262 144 needs V at q4_0 and ub 1024, which puts pp at ~400: after a compaction, 100k of kept context is re-read in ~4.5 min instead of ~3. Open for the author, see below |
+| Window for `dedicated` | The 15 % rule allows all of them: tg @43k is 32.2-33.6 across 65k-262k with MTP. **131 072 recommended**: q8_0/q8_0 as designed, pp 700. 262 144 needs V at q4_0 and ub 1024, which puts pp at ~400: after a compaction, 100k of kept context is re-read in ~4.5 min instead of ~3. Settled at 131k by phase 1b (KV quality) |
 | Window for `display` | Not run with a desktop on the card. By arithmetic, 131k/+mtp at `CPU_MOE` 40, ub 2048: ~6 430 MiB, which leaves ~1 GB. Verify once |
 | Hybrid prompt cache | **Works**, on both builds: `again.n` is 4 against 42 803 every time. No extra flag |
 | Thinking in the prompt | Same as Bonsai's template: `--reasoning-preserve` renders every earlier thinking block, `--no-reasoning-preserve` only those after the last user message (`render-*.txt`). The mainline build has the same switch |
 | RAM need | RSS 20-23.5 GB for the configs above (the model is mmapped), and MemAvailable fell by 2-3 GB over the page cache during the run. **`MODEL_RAM_MB` ~24 000**, so preflight should ask for `MemTotal` >= ~28 GB. 30.9 GB was enough with ~25 GB still available |
 
-Config for phase 2 (`dedicated`), unless the author picks 262k:
+Config for phase 2 (`dedicated`):
 `LLAMA_REPO` ggml-org, `LLAMA_COMMIT` `8212c78`, own `LLAMA_DIR`, no `PATCH_SET`;
 `-c 131072 -ngl 99 --fit off --n-cpu-moe 38 -fa on -ctk q8_0 -ctv q8_0 -b 2048 -ub 2048
 --spec-type draft-mtp`, so `CPU_MOE` 38 and `UB` 2048 in the profile. Not tried: draft length other than
 3, `-ub 1536`/`3072` between the measured points, MTP at `CPU_MOE` 37 (~7 840 MiB, on the edge).
+
+## Phase 1b — the KV types (2026-09-26, the method of T-035 phase 2)
+
+Same corpus, scripts and depths as Bonsai's in T-035, so the numbers sit in one table. Mainline
+`8212c78` with `llama-perplexity` built in place (`llama-server`'s md5 unchanged); MTP off, since it
+only drafts and the logits are the model's; experts in RAM (`--n-cpu-moe 40`), which does not
+change the numbers. Scripts and logs in `runs/T-034-qwen-moe/` (`phase2a.sh`, `phase2b.sh`,
+`kld-*.log`, `long*.jsonl`); `base.kld` deleted.
+
+**16k chunk against an f16 cache** (PPL of the base 1.461). An f16-against-f16 control run gives
+a mean KLD of 0.000000 and 100 % same top p: the run is deterministic, so every difference
+below is the cache:
+
+| K/V | Mean KLD | 99 % KLD | Max KLD | Same top p | Bonsai, same p |
+| --- | --- | --- | --- | --- | --- |
+| q8_0/q8_0 | 0.0033 | 0.063 | 1.62 | 99.07 ± 0.11 % | 99.83 % |
+| q8_0/q4_0 | 0.0049 | 0.086 | 1.74 | 98.94 ± 0.11 % | 99.66 % |
+| q4_0/q4_0 | 0.0056 | 0.097 | 0.82 | 98.76 ± 0.12 % | 99.39 % |
+
+**At depth**, through `score_long.py`: 512 teacher-forced tokens after 92 160 (Bonsai's depth) and
+after 122 880 (the 131k window's), against f16 on the card, 131k window, `prompt_n` 1 per step
+throughout:
+
+| K/V | @92k same top-1 | @92k KLD (top 20) | @120k same top-1 | @120k KLD (top 20) |
+| --- | --- | --- | --- | --- |
+| q8_0/q8_0 | 99.80 % | 0.00096 | 99.80 % | 0.00119 |
+| q8_0/q4_0 | 99.61 % | 0.00132 | 98.83 % | 0.00286 |
+| q4_0/q4_0 | 99.41 % | 0.00249 | 98.83 % | 0.00397 |
+| Bonsai q8_0/q4_0 / q4_0/q4_0 | 99.80 / 99.61 % | 0.00021 / 0.00073 | – | – |
+
+The mean log-probability of the true token does not move with the cache type (-0.1381 to
+-0.1413 @92k, -0.2576 to -0.2615 @120k, the quantized ones not worse), so the differences are
+in close calls, not in reading the text.
+
+What it answers:
+
+- **Qwen's cache is 3-33x more sensitive than Bonsai's**, by mean KLD per type and depth. Even `q8_0`/`q8_0` deviates as much at
+  16k (KLD 0.0033) as Bonsai's `q4_0`/`q4_0` three times over. The likely reason is the geometry:
+  2 KV heads of 256 against Bonsai's 4, so each stored value carries more. Measured, not explained.
+- **`q8_0`/`q8_0` stays, as designed**, and it holds its level with depth (KLD 0.00096 → 0.00119
+  from 92k to 120k).
+- **This decides the window for `dedicated`: 131 072.** The 262k config needs V at `q4_0`, which at
+  120k costs 2.4x the KLD of `q8_0`/`q8_0` and 1 % of top-1 tokens, and grows with depth (0.00132 →
+  0.00286). Together with its lower prompt speed (phase 1), there is no case for it at this VRAM.
+- Not measured: `f16`/`f16` as a shipped option. At 131k it costs ~1.3 GB more than `q8_0`, i.e.
+  three expert layers or the ubatch, and `q8_0`/`q8_0` shows no depth problem that would pay for it.
+- Caveats as in T-035: llama.cpp's own source (PPL 1.46), 512 positions per depth, n = 1.
 
 ## Phase 2 — the config split (here, no GPU needed; one commit per change)
 
@@ -288,8 +335,7 @@ and the result is still broken, that is the answer on this model, and the slot w
 
 - ~~RAM on the 4060 Ti PC~~: WSL2 sees 30.9 GB, and the 22.7 GB `UD-Q4_K_M` runs with ~25 GB
   still available. `UD-IQ4_XS` is not needed here.
-- **131k or 262k for `dedicated`.** Same tg; 262k costs V at q4_0 and prompt speed (~400 against
-  ~700 tok/s). Phase 1 recommends 131k; phase 3 at 131k would show whether the window still
-  compacts at all.
+- ~~131k or 262k for `dedicated`~~: 131k, decided by phase 1b. 262k needs V at `q4_0`, which
+  Qwen's cache does not take well at depth.
 - **Whether `qwen36-35b` ships as a supported model or stays a branch** until Qwen 4 exists.
   The config split is worth keeping either way; the Qwen files could wait.
