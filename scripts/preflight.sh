@@ -19,7 +19,7 @@ hard() { printf '   \033[1;31mfail\033[0m  %s\n' "$*"; fails=$((fails + 1)); }
 nearest() { local d="$1"; while [[ ! -d "$d" && "$d" != / ]]; do d="$(dirname "$d")"; done; printf '%s' "$d"; }
 free_mb() { df -P -BM "$(nearest "$1")" 2>/dev/null | awk 'NR == 2 { sub(/M$/, "", $4); print $4 }'; }
 
-log "preflight ($BACKEND, steps: ${steps[*]})"
+log "preflight ($MODEL on $BACKEND, steps: ${steps[*]})"
 
 # --- system -----------------------------------------------------------------
 if [[ "$(uname -s)" != Linux ]]; then
@@ -34,10 +34,17 @@ else
   esac
 fi
 
+# --- model ------------------------------------------------------------------
+# A model file names the backends it was measured on; Qwen's experts-in-RAM setup only on CUDA.
+case " $MODEL_BACKENDS " in
+  *" $BACKEND "*) ;;
+  *) hard "model: MODEL=$MODEL is measured on ${MODEL_BACKENDS// /, } only, not $BACKEND - see docs/qwen.md" ;;
+esac
+
 # --- disk -------------------------------------------------------------------
 need_home=0
 runs build && need_home=$((need_home + 2000))
-runs model && need_home=$((need_home + 5800))
+runs model && need_home=$((need_home + MODEL_DISK_MB))
 runs pi    && need_home=$((need_home + 500))
 if ((need_home > 0)); then
   have="$(free_mb "$BONSAI_HOME")"
@@ -60,8 +67,22 @@ fi
 
 # --- memory -----------------------------------------------------------------
 avail_mb="$(awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null)"
-if [[ -z "$avail_mb" ]]; then
+total_mb="$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null)"
+if [[ -z "$avail_mb" || -z "$total_mb" ]]; then
   soft "RAM: cannot read /proc/meminfo"
+elif ((MODEL_RAM_MB > 0)); then
+  # A MoE keeps its experts in RAM for as long as it serves, so the ceiling is MemTotal: under
+  # WSL2 that is half the Windows RAM unless .wslconfig says otherwise. See docs/qwen.md.
+  need_ram=$((MODEL_RAM_MB + 4000))
+  wslhint=""; grep -qi microsoft /proc/version 2>/dev/null \
+    && wslhint=" - WSL2 sees half the Windows RAM by default: raise memory= in %UserProfile%\\.wslconfig, then wsl --shutdown"
+  if ((total_mb < need_ram)); then
+    hard "RAM: ${total_mb} MB in total, $MODEL holds ~${MODEL_RAM_MB} MB in RAM while serving and needs ~${need_ram} MB$wslhint"
+  elif ((avail_mb < MODEL_RAM_MB)); then
+    soft "RAM: ${avail_mb} of ${total_mb} MB available, $MODEL holds ~${MODEL_RAM_MB} MB while serving - close something before starting it"
+  else
+    pass "RAM: ${avail_mb} of ${total_mb} MB available, $MODEL holds ~${MODEL_RAM_MB} MB"
+  fi
 elif ((avail_mb < 3000)); then
   hard "RAM: ${avail_mb} MB available - serving needs ~8 GB of headroom, see docs/dev.md#ram-and-build-memory"
 elif ((avail_mb < 7500)); then
@@ -126,7 +147,7 @@ if ((vram_total > 0)); then
   # A desktop on this GPU takes 0.5-1.2 GB, which is exactly the headroom the 64k profile does
   # not have. See docs/dev.md#vram-budget.
   if ((vram_used > 400)) && [[ "$PROFILE" == dedicated ]]; then
-    soft "VRAM: ${vram_used} MiB already in use - something (a desktop?) is on this GPU; the 'dedicated' profile leaves ~440 MiB spare. Use PROFILE=display, or move the display to an iGPU"
+    soft "VRAM: ${vram_used} MiB already in use - something (a desktop?) is on this GPU; the 'dedicated' profile fills the card to within a few hundred MiB. Use PROFILE=display, or move the display to an iGPU"
   fi
 elif [[ "$BACKEND" == vulkan ]]; then
   soft "VRAM: cannot read it from sysfs - check by hand that the card has 8 GB"

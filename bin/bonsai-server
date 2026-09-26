@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
-# Starts Ternary-Bonsai-2-27B on the PrismML llama.cpp fork with the settings from config.env.
+# Starts the model MODEL names (Ternary-Bonsai-2-27B by default) on the llama.cpp tree its model
+# file pins, with the settings from config.env, the profile and models/$MODEL.env.
 # Extra arguments go straight to llama-server and override the defaults. Rationale: docs/dev.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
@@ -22,13 +23,20 @@ else
   PRESERVE_THINKING_FLAG=--no-reasoning-preserve
 fi
 
-exec "$LLAMA_SERVER" -m "$MODEL_PATH" \
-  --host "$LISTEN_HOST" --port "$PORT" --alias "$MODEL_ALIAS" \
-  -c "$CTX" -ngl 99 --fit off -fa on \
-  --cache-type-k "$KV_K" --cache-type-v "$KV_V" \
-  --parallel 1 --no-context-shift \
-  --jinja --reasoning on --reasoning-effort "$EFFORT" \
-  --reasoning-budget "$BUDGET" --reasoning-budget-message "$BUDGET_MSG" \
-  $PRESERVE_THINKING_FLAG \
-  --temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0 \
-  "$@"
+args=(-m "$MODEL_PATH"
+  --host "$LISTEN_HOST" --port "$PORT" --alias "$MODEL_ALIAS"
+  -c "$CTX" -ngl 99 --fit off -fa on)
+# A MoE model keeps the experts of CPU_MOE layers in RAM, and reads prompts at ~250 tok/s with
+# the default ubatch of 512 against ~1 050 at 4096. Both set by its profile. See docs/qwen.md.
+if [[ -n "$CPU_MOE" ]]; then args+=(--n-cpu-moe "$CPU_MOE"); fi
+if [[ -n "$UB" ]]; then args+=(-b "$UB" -ub "$UB"); fi
+args+=(--cache-type-k "$KV_K" --cache-type-v "$KV_V"
+  --parallel 1 --no-context-shift
+  --jinja --reasoning on)
+if [[ -n "$EFFORT" ]]; then args+=(--reasoning-effort "$EFFORT"); fi
+args+=(--reasoning-budget "$BUDGET" --reasoning-budget-message "$BUDGET_MSG"
+  "$PRESERVE_THINKING_FLAG")
+if [[ -n "$SPEC_TYPE" ]]; then args+=(--spec-type "$SPEC_TYPE"); fi
+args+=(--temp 1.0 --top-p 0.95 --top-k 20 --min-p 0.0)
+
+exec "$LLAMA_SERVER" "${args[@]}" "$@"
