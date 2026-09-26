@@ -41,7 +41,7 @@
   at 32k, 18.8 → 7.8 at 131k), with buffers moving from VRAM to GTT. See
   [qwen.md](../docs/qwen.md#on-the-rx-570-vulkan). Preflight now lets `vulkan` through, and
   its RAM threshold is 26 000 MB, not 28 000, because a 28 GB VM reports 27.4 GB.
-  **Follow-up, not this ticket:** the cause of the repeat slowdown, then a Vulkan profile.
+  **Follow-up:** [T-036](T-036-qwen-vulkan-repeat-slowdown.md), the cause of the repeat slowdown, then a Vulkan profile.
 
 ## Before phase 3, on the 4060 Ti
 
