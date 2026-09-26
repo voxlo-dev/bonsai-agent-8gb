@@ -22,7 +22,7 @@ reuses a number either way.
 - [`T-017`](T-017-upstream-ptq1_0-vulkan-patch.md) Hand the PTQ1_0 Vulkan decode to the fork’s #185 — a comment with the measurement and the patch link, not a PR (two PRs were ahead, and the fork’s rules need an author who can defend every line); drop `patches/vulkan/` once a pin carries an equivalent · chore · medium · S
 - [`T-031`](T-031-sharp-chat-template.md) Measure the Qwen Sharp chat template — one plain session with `--chat-template-file`, thinking per turn and turns to result; expectation small, the delta is one terseness block · spike · low · S
 - [`T-032`](T-032-docker-server-image.md) A Dockerfile for the server, not for pi — `llama-server` in a container, pi stays on the host through `SERVER_HOST`; answers the apt-toolchain problem (T-005) and nothing about drivers, VRAM or the profile · feature · medium · M
-- [`T-034`](T-034-qwen-moe-model.md) A second model: Qwen3.6-35B-A3B with the experts in RAM — a `MODEL` axis beside `PROFILE`, the window toward 262k, measured first; the slot a Qwen 4 35B-A3B drops into · feature · medium · L
+- [`T-034`](T-034-qwen-moe-model.md) A second model: Qwen3.6-35B-A3B with the experts in RAM — measured and built (`MODEL=qwen36-35b`, 131k, MTP on mainline); left: one agent session, the `display` check, supported or experimental; the slot a Qwen 4 35B-A3B drops into · feature · medium · S
 
 ## Open source (release checklist)
 
@@ -35,5 +35,5 @@ Remaining order: T-035 → T-017 comment posted. T-020 and T-029 follow the repo
 
 - [`T-020`](T-020-supported-hardware.md) Finish the hardware table — 12/16 GB profiles and the rows that hardware reports bring in; the three tiers are already in the README · decision · medium · M
 - [`T-024`](T-024-public-repo-setup.md) Public repo setup — done except confirming the two issue templates render · chore · low · S
-- [`T-035`](T-035-bonsai-measured.md) Measure Bonsai the way T-034 measures Qwen — the window beyond 64k (`q4_0`/`q4_0`, KV in RAM), KV quality against f16, and the study-harness run twice for the quality claim; was T-027 and T-033 · spike · high · M
+- [`T-035`](T-035-bonsai-measured.md) Measure Bonsai the way T-034 measures Qwen — speed, window and KV quality done (docs/context-window.md); left: the behaviour day (Bonsai 96k, Bonsai 64k, Qwen) that decides the new defaults, then the study-harness run twice for the quality claim; was T-027 and T-033 · spike · high · M
 - [`T-029`](T-029-upstream-watch.md) Watch mainline — move off the fork when ggml-org takes PTQ1_0 (#29077), keep the Vulkan patch alive · decision · medium · M
