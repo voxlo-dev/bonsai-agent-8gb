@@ -188,7 +188,7 @@ PROFILE=display ./install.sh pi     # pi's copy of the values
 PROFILE=display bonsai-pi           # and every run after
 ```
 
-Both are in [`profiles/`](profiles/); the values inside constrain each other, see [Context budget](docs/dev.md#context-budget). Everything else lives in [`config.env`](config.env). A variable set in the environment wins over both, and extra arguments go straight to llama-server:
+Both are in [`profiles/bonsai/`](profiles/bonsai/); the values inside constrain each other, see [Context budget](docs/dev.md#context-budget). Everything else lives in [`config.env`](config.env). A variable set in the environment wins over both, and extra arguments go straight to llama-server:
 
 ```bash
 CTX=32000 bonsai-server
@@ -198,10 +198,11 @@ bonsai-server --port 9000
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
+| `MODEL` | `bonsai` | `bonsai` or `qwen36-35b`, see [A second model](#a-second-model-experimental) |
 | `BACKEND` | `cuda` | `cuda` or `vulkan`; read by `deps`, `build` and `bonsai-server`. `build` rebuilds by itself when it changes |
 | `BUILD_JOBS` | auto | parallel compile jobs; empty derives them from free RAM and core count, see [RAM and build memory](docs/dev.md#ram-and-build-memory) |
-| `CTX` | `64000` | context window in tokens (profile); 8 GB fits no more, see [VRAM budget](docs/dev.md#vram-budget) |
-| `KV_K` / `KV_V` | `q8_0` / `q4_0` | KV cache types for keys and values |
+| `CTX` | `64000` | context window in tokens (profile); the most 8 GB holds at the default cache types. 96k fits with `q4_0`/`q4_0`, see [Context window](docs/context-window.md) |
+| `KV_K` / `KV_V` | `q8_0` / `q4_0` | KV cache types for keys and values; measured against `f16` in [Context window](docs/context-window.md#kv-cache-quality) |
 | `EFFORT` | `medium` | chat-template reasoning effort: `low`, `medium`, `xhigh` |
 | `BUDGET` | `8192` (profile) | thinking tokens per turn; at most `RESERVE_TOKENS - 4096 -` a tool call, see [Context budget](docs/dev.md#context-budget) |
 | `PRESERVE_THINKING` | `false` | keep earlier turns' thinking in the prompt |
@@ -219,15 +220,32 @@ After changing the profile, `CTX`, `SERVER_HOST`, `PORT`, `MAX_TOKENS`, `RESERVE
 
 The last three carry each other: pi's own defaults assume a 200k window and make it compact on every single turn at this size. [Context budget](docs/dev.md#context-budget) has the measurements and the constraints between them.
 
+### A second model (experimental)
+
+`MODEL=qwen36-35b` serves [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B) instead,
+a mixture-of-experts model whose experts live in system RAM while the card holds the rest. On the
+same 4060 Ti it runs a 131k window at 39-45 tok/s on natural output, with multi-token prediction.
+It needs **~28 GB of RAM** (under WSL2, raise `memory=` in `%UserProfile%\.wslconfig`), 22 GB of
+disk, CUDA, and a mainline llama.cpp build next to the fork. It is measured for speed and cache
+quality, not yet in an agent session: [docs/qwen.md](docs/qwen.md).
+
+```bash
+MODEL=qwen36-35b ./install.sh       # its own build, model and pi config
+MODEL=qwen36-35b bonsai-pi
+```
+
+Each model has its own profiles and its own pi config (`pi-agent-qwen36-35b/`), so switching does
+not touch the other one's settings or sessions.
+
 ## Performance
 
-RTX 4060 Ti 8 GB, 48k context, K `q8_0` / V `q4_0` (the numbers predate the 64k default):
+RTX 4060 Ti 8 GB, the default 64k window, K `q8_0` / V `q4_0`:
 
 | Context filled | Prompt processing | Generation |
 | --- | --- | --- |
-| short | - | 36 tok/s |
-| ~18k | 451 tok/s | 31 tok/s |
-| ~39k | 399 tok/s | 27 tok/s |
+| short | - | 35.7 tok/s |
+| a real turn, thinking and code | - | 35.6 tok/s |
+| ~43k | 415 tok/s | 25.7 tok/s |
 
 VRAM stays at ~7.3 GB at 48k and 7.75 GB at 64k: the KV cache is allocated in full at start.
 
@@ -267,6 +285,8 @@ cannot, `PROFILE=display` drops the window to 48k to make room.
 | --- | --- |
 | [docs/dev.md](docs/dev.md) | why every non-default choice is what it is, with its measurement, plus troubleshooting |
 | [docs/performance.md](docs/performance.md) | what limits generation speed, and what was tried and rejected |
+| [docs/context-window.md](docs/context-window.md) | how large a window fits on 8 GB, and what the KV cache types cost in quality, for both models |
+| [docs/qwen.md](docs/qwen.md) | the second model: Qwen3.6-35B-A3B with its experts in RAM, and the slot for Qwen 4 |
 | [docs/model-comparison.md](docs/model-comparison.md) | eight local models as coding agents on 8 GB, measured before this repo existed |
 | [docs/localagent.md](docs/localagent.md) | the multi-agent workflow: frozen, not recommended, and why |
 | [AGENTS.md](AGENTS.md) | where contributors and AI agents start |
