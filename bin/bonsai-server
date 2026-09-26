@@ -15,6 +15,11 @@ if [[ "$BACKEND" == vulkan ]]; then
   # worth 1.22x on this model. Needs Mesa >= 25.2, silently ignored below.
   # See docs/dev.md#other-gpu-backends.
   export RADV_PERFTEST="${RADV_PERFTEST:-nogttspill}"
+  # Without Resizable BAR only 256 MiB of VRAM are CPU-visible, and llama.cpp puts buffers there
+  # that the host then writes directly: Qwen's checkpoint restores moved them to GTT, 2.3x slower
+  # from the second request on. Off, writes go through a staging copy; Bonsai measures the same.
+  # See docs/qwen.md#on-the-rx-570-vulkan.
+  export GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM="${GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM:-1}"
 fi
 
 if [[ "$PRESERVE_THINKING" == "true" ]]; then
