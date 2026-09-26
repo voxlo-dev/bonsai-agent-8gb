@@ -116,6 +116,41 @@ T-034 phase 3 is what confirms or moves it.
 Not tried: draft lengths other than 3, `UB` 1536 or 3072, `f16` for the cache (at 131k it costs
 ~1.3 GB more, three expert layers or the ubatch).
 
+## On the RX 570 (Vulkan)
+
+The same GGUF on the AMD box (RX 570 8 GB, Polaris, RADV with Mesa 26.1.2 and
+`RADV_PERFTEST=nogttspill`, Ryzen 7 3700X, 28 GB in the VM), on mainline `8212c78` built with
+`BACKEND=vulkan`. 2026-09-27, one pass; scripts and logs in `runs/T-034-qwen-moe-rx570/`. K and V
+are `q8_0`. `chat` is a 256-token coding turn with thinking; `prompt` is T-016's 847-token prompt.
+
+| ctx | `CPU_MOE` | ub | MTP | VRAM | tg short | tg chat | pp 847 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 32 768 | 40 | 512 | – | 2 777 | 17.9 | 17.8 | 77 |
+| 32 768 | 34 | 512 | – | 5 632 | 19.5 | 19.4 | 90 |
+| 32 768 | 31 | 512 | – | 7 040 | 19.3 | 19.5 | 97 |
+| 32 768 | 34 | 512 | on | 6 471 | 27.9 | 23.3 | 90 |
+| 32 768 | 34 | 2048 | – | 5 783 | 19.4 | 19.5 | 132 |
+| 65 536 | 38 | 2048 | on | 5 645 | 26.4 | 24.1 | 119 |
+| 131 072 | 40 | 2048 | on | 5 971 | 24.6 | 25.0 | 116 |
+
+**2.5-3.5x Bonsai on the same card** (7.06 tok/s, 54 tok/s on the prompt). The experts in RAM are
+not the limit here: nine expert layers on the card buy 9 %, then nothing. That makes the card
+a better home for the window, MTP (+20-30 %, 63-75 % accepted) and the ubatch (prompts +47 %)
+than for experts. RSS was 16.7-21.4 GB, and `MemAvailable` stayed above 22 GB, because the
+mmapped experts count as page cache.
+
+**At depth, and the catch.** At 131k with MTP, a 32 781-token prompt is read at 120 tok/s and then
+generates at 18.8 tok/s. That is clean, with no spill. **The next request on the same cache
+generates at 7.8 tok/s**, and GTT grows from 1.5 to 2.2 GB while VRAM shrinks. At a 32k window the
+same pattern is milder: 20.7 on the first request, 16.0 on each repeat, with ~250 MB moving from
+VRAM to GTT after the first. An agent session is nothing but repeats on one cache, so the lower
+numbers are the ones pi would see. The cause is open: RADV migrating buffers, or mainline's
+hybrid-state checkpoints, are the candidates. Until it is found, a small window is the safer
+choice on this card, and even its repeat speed is over twice Bonsai's.
+
+No profile is written for Vulkan yet. The `cuda` profiles would load on this card, since VRAM
+is not the limit, but the repeat slowdown should be understood first.
+
 ## When Qwen 4 lands
 
 `models/qwen4-35b.env` with its pin and a mainline commit that knows its architecture,

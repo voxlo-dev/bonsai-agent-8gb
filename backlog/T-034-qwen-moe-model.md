@@ -36,6 +36,13 @@
   `CPU_MOE` and `UB` are passed when set. Sampling stays shared (Bonsai's 1.0/0.95/20/0), which is
   also what Qwen used for its own agent benchmarks.
 
+- **Qwen on the RX 570** (2026-09-27, VM raised to 28 GB): 17.9-27.9 tok/s, 2.5-3.5x Bonsai there,
+  up to 131k with MTP. The open catch is that repeated requests on one cache slow down (20.7 → 16.0
+  at 32k, 18.8 → 7.8 at 131k), with buffers moving from VRAM to GTT. See
+  [qwen.md](../docs/qwen.md#on-the-rx-570-vulkan). Preflight now lets `vulkan` through, and
+  its RAM threshold is 26 000 MB, not 28 000, because a 28 GB VM reports 27.4 GB.
+  **Follow-up, not this ticket:** the cause of the repeat slowdown, then a Vulkan profile.
+
 ## Before phase 3, on the 4060 Ti
 
 1. `git pull` on this branch, then `MODEL=qwen36-35b ./install.sh`. `build` compiles mainline into
