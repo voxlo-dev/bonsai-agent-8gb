@@ -206,6 +206,51 @@ grep -H "Final estimate" ppl96k-*.log
 
 If the `f16` run is still going after an hour, `-ctk q8_0 -ctv q8_0 -nkvo` is the reference instead.
 
+## Phase 2 — results (2026-09-26)
+
+Scripts and logs in `runs/T-035-bonsai-measured/` (`phase2a.sh`, `phase2b.sh`, `kld-*.log`,
+`long-*.jsonl`). `llama-perplexity` built in place; `llama-server`'s md5 is unchanged.
+`base.kld` (3.8 GB) deleted.
+
+**2a, one 16k chunk against an f16 cache** (PPL of the base 1.701):
+
+| K/V | Mean KLD | 99 % KLD | Max KLD | Same top p | PPL ratio |
+| --- | --- | --- | --- | --- | --- |
+| q8_0/q8_0 | 0.000101 | 0.0013 | 0.011 | 99.83 ± 0.05 % | 0.9998 |
+| q8_0/q4_0 (shipped) | 0.000612 | 0.0071 | 0.216 | 99.66 ± 0.06 % | 1.0004 |
+| q4_0/q4_0 | 0.001127 | 0.0139 | 0.213 | 99.39 ± 0.09 % | 1.0007 |
+
+**2b changed method.** `llama-perplexity` cannot run a 96k chunk here, not even for perplexity
+alone: it reserves logits for the whole chunk, 94k x 248k vocabulary x 4 bytes ~ 93 GB, and aborts
+with `bad_alloc`. And 98 304 would be above the 96k edge from phase 1 anyway. Instead,
+`score_long.py` goes through the server: each config reads the first 92 160 tokens of the
+corpus, then scores the next 512 one at a time (teacher-forced, top-20 log-probs, `prompt_n` 1 per
+step, so the cache stayed intact). `compare_long.py` compares against f16 with the cache in RAM.
+The KLD is taken over the reference's top 20, so it is a lower bound on the true one:
+
+| K/V at 92k | Same top-1 | KLD (top 20) | Mean logprob of the true token | 92k prefill |
+| --- | --- | --- | --- | --- |
+| f16/f16, `-nkvo` (reference) | – | – | -0.1867 | 342 s |
+| q8_0/q4_0, `-nkvo` (shipped types) | 99.80 % | 0.00021 | -0.1851 | 313 s |
+| q4_0/q4_0 on the card, 96k window | 99.61 % | 0.00073 | -0.1868 | 258 s |
+
+What it answers:
+
+- **The suspicion against `q4_0` for V is answered: no quality case.** The shipped `q8_0`/`q4_0`
+  is 0.17 points of "same top p" below `q8_0`/`q8_0`, inside the ~0.5 of phase 4's rule. Its mean
+  KLD is 6x `q8_0`/`q8_0`'s, but both are far below anything that shows in output. Speed (phase 1)
+  gives `q8_0`/`q8_0` +2.7 % at 43k for 12k less window. The default stays.
+- **`q4_0`/`q4_0` passes 2a and 2b.** 0.44 points below `q8_0`/`q8_0` at 16k; at 92k 2 of 512
+  top-1 tokens differ from f16, and the true token's log-probability is the same to four digits.
+  So the 96k window reads its depth. Its prefill at 96k with the cache on the card is also
+  the clean run phase 1 was missing: 92 160 tokens in 258 s (357 tok/s), no spill.
+- Caveats: the corpus is llama.cpp's own source, which the model reads easily (PPL 1.7);
+  512 positions in one place of one text; n = 1 per config. Harder text would probably widen the
+  gaps; whether it changes their order is unmeasured.
+
+For phase 4: a `long` profile (or `dedicated` itself) at 96 000 with `q4_0`/`q4_0` is backed on speed
+and quality. What is left is its budget values, and phase 3's session on it.
+
 ## Phase 3 — behaviour and the quality claim (4060 Ti; was T-027)
 
 1. **The study cell: Bonsai through OpenCode, twice.** The study's exact Tron prompt and
