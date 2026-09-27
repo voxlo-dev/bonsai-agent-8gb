@@ -106,8 +106,14 @@ if [[ "$autostart" == "true" ]]; then
   fi
 fi
 
-curl -sf --max-time 2 "$url/v1/models" | grep -q "\"$MODEL_ALIAS\"" \
-  || die "no bonsai-server with model $MODEL_ALIAS at $url - start bonsai-server, or set SERVER_AUTOSTART=true"
+# With two models, the server on PORT may be the other one: reused as healthy above, it would
+# answer pi under the wrong name. Say which it is instead of starting pi against it.
+models="$(curl -sf --max-time 2 "$url/v1/models" || true)"
+if ! grep -q "\"$MODEL_ALIAS\"" <<<"$models"; then
+  served="$(grep -o '"id" *: *"[^"]*"' <<<"$models" | head -1 | sed 's/.*"\([^"]*\)"$/\1/' || true)"
+  [[ -n "$served" ]] && die "the server at $url serves $served, not $MODEL_ALIAS (MODEL=$MODEL) - stop it, or give one of them another PORT"
+  die "no bonsai-server with model $MODEL_ALIAS at $url - start bonsai-server, or set SERVER_AUTOSTART=true"
+fi
 
 # pi handles Ctrl+C itself. Uncaught, SIGINT would also end this script without its EXIT trap;
 # caught, bash resets it for pi, which still gets it as usual.

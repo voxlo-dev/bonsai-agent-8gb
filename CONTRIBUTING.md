@@ -37,7 +37,8 @@ instead.
 
 - POSIX-ish bash, `set -euo pipefail` through `scripts/lib.sh`; `bin/bonsai-server` sets it itself.
 - A comment block at the top of every script saying what it does and what it needs.
-- Settings are declared in `config.env` only, or in `profiles/*.env` for the window and budget
+- Settings are declared in `config.env` only, or in `models/*.env` and
+  `profiles/{model}/*.env` for per-model pins and flags and the window and budget
   values. Never hard-code one in a consumer.
 - Every install step stays idempotent: check whether the work is done, exit early if it is.
 - Nothing is installed into the repo, and nothing into the user's own tools. No global npm package,

@@ -111,7 +111,7 @@ matrix takes. coopmat2 is deliberately absent for PTQ1_0 and is NVIDIA-only anyw
 
 | | RX 570, shipped kernel | RX 570, T-016 decode | RTX 4060 Ti / CUDA |
 | --- | --- | --- | --- |
-| prompt processing | 3.8 tok/s | 54 tok/s (847-token prompt) | 451 tok/s |
+| prompt processing (847 tokens) | 36 tok/s | 54 tok/s | 451 tok/s |
 | generation | 1.58 tok/s (633 ms/token) | 7.0 tok/s (143 ms/token) | 36 tok/s |
 
 **The kernel was the ceiling, and the decode was the kernel.** `ptq1_0.glsl` as shipped
@@ -138,7 +138,7 @@ against the CPU backend, before and after. What it bought, 16k and 48k identical
 | Path | before | after | Gain |
 | --- | --- | --- | --- |
 | generation (`mul_mat_vec`) | 632.96 ms/token | 142.56 ms/token | 4.4x |
-| prompt, 847 tokens (`mul_mm`) | 3.8 tok/s | 54.0 tok/s | 14x |
+| prompt, 847 tokens (`mul_mm`) | 36.0 tok/s | 54.0 tok/s | 1.5x |
 
 Two things the numbers say about what is left. The memory clock now ramps on its own (1000 to
 1750 MHz during generation, where the shipped kernel sat at 300), so the kernel has become
@@ -148,6 +148,32 @@ efficiency would allow, so it is not bandwidth-bound yet. The remaining ALU cost
 bytes, so every byte is loaded and looked up five times per token. A dedicated PTQ1_0 mat-vec
 kernel that keeps all five trits of a loaded word (the way the K-quant `mul_mat_vec_*` shaders
 own their block layout) is the next step, and a larger one; the ceiling for it is ~22 tok/s.
+
+**Correction (T-017, 2026-09-24).** T-016 first printed the prompt gain as 3.8 → 54 tok/s,
+14x. The 3.8 was the 18-token prompt of the generation request, not a long prompt: T-016 never
+measured the shipped kernel on the 847-token one. Measured at the fork's `842b188` (whose
+PTQ1_0 `mul_mm` path is unchanged from the pin), the shipped kernel does 36.0 tok/s there, so
+the decode is worth 1.5x on prompts. The tables above carry the corrected value; the
+generation numbers stand.
+
+**Upstream, [#252](https://github.com/PrismML-Eng/llama.cpp/pull/252) is the generation half
+of this, done properly.** The fork's `842b188` release carries an integer-dot mat-vec (#238),
+which gfx803 cannot use (`int dot: 0`). #252, open, adds the dedicated PTQ1_0 `mul_mat_vec`
+shader described above as the next step. On the RX 570, 16k, same flags as T-016
+(`runs/T-017-pr252-rx570/`), all four builds on `842b188`:
+
+| Build | generation | prompt, 847 tokens | `llama-bench` tg128 / pp512 |
+| --- | --- | --- | --- |
+| `842b188` | 633.4 ms/token | 36.0 tok/s | 1.58 / 42.6 |
+| + #252 | 141.6 ms/token | 39.8 tok/s | 7.15 / 42.4 |
+| + T-016 patch | 143.9 ms/token | 53.8 tok/s | 6.99 / 59.1 |
+| + #252 + T-016 patch | 141.4 ms/token | 53.9 tok/s | 7.15 / 59.1 |
+
+`test-backend-ops -b Vulkan0 -p ptq1_0` passes `MUL_MAT`, `MUL_MAT_ID` and `GET_ROWS` in all
+four (140 + 83 + 4). #252 reaches the same generation speed as the T-016 decode, slightly ahead,
+and stays at the same ~3x off the ~45 ms roofline, so the remaining cost is not in the trit
+decode. What only the T-016 patch still adds is the `mul_mm` loader: +40-50 % on prompts. The two
+compose without conflict (the patch needs `git am -3` on `842b188` for context in `types.glsl`).
 Polaris has no integer-dot instruction, so the `mul_mat_vecq` route is not available here.
 
 **The environment is worth 1.76x on the shipped kernel, and getting it wrong looks like a kernel
@@ -198,7 +224,10 @@ supported and not the default. How the setup does it, all of it measured above:
   pinned `LLAMA_COMMIT` does not carry the decode until upstream takes it (T-017). Same
   binary flags otherwise, same KV types, same `-fa on`.
 - `bonsai-server` exports `RADV_PERFTEST=nogttspill` (1.22x; needs Mesa >= 25.2, `deps` warns
-  below that). Nothing forces the clocks: with the new decode `mclk` ramps by itself, and the
+  below that), and `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM=1`. That one is neutral for Bonsai
+  (143.81 vs 144.07 ms/token at 64k) and 2.3x on Qwen's repeated requests, whose checkpoint writes
+  otherwise push buffers out of the 256 MiB of CPU-visible VRAM
+  ([qwen.md](qwen.md#on-the-rx-570-vulkan)). Nothing forces the clocks: with the new decode `mclk` ramps by itself, and the
   knob needs root anyway.
 - The `dedicated` profile holds as is: 64k measured at 7 434 MiB of 8 192 on the RX 570,
   141.56 ms/token (`runs/T-016-ptq1_0-vulkan-decode/measure-new-64k.out`), so the window
@@ -276,7 +305,9 @@ throughout, which is why guest-wide usage peaked at 15.1 GB while the build itse
 | KV cache, per 1k tokens, `q8_0`/`q8_0` | 34 |
 | KV cache, per 1k tokens, `q8_0`/`q4_0` | 26 |
 
-At 48k context with `q8_0`/`q4_0` the process holds ~7.3 GB of 8 GB. **64k is the default**: measured at 7 747 MiB of 8 188, 36 tok/s at short context and no layer on the CPU - 441 MiB to spare, which is why the GPU must drive no display. 80k does not fit.
+At 48k context with `q8_0`/`q4_0` the process holds ~7.3 GB of 8 GB. **64k is the default**: measured at 7 747 MiB of 8 188, 36 tok/s at short context and no layer on the CPU - 441 MiB to spare, which is why the GPU must drive no display.
+
+**More than 64k only through the cache type**: 96k fits at `q4_0`/`q4_0` (18 MiB per 1k) and reads that depth cleanly, and nothing larger stays on the card. Under WSL2 a window that is too large does not fail to load. It spills into shared memory once the cache fills, and the VRAM reading does not show it. The measurements, and how to test a window at depth, are in [context-window.md](context-window.md). The second model, `MODEL=qwen36-35b`, has its own budget with the experts in RAM: [qwen.md](qwen.md).
 
 **Display on the iGPU.** When the RTX also drives the Windows desktop, the desktop takes 0.5 to 1.2 GB and competes for GPU time. With the monitor on the mainboard (iGPU enabled in BIOS, browsers set to "Power saving" under Windows *Settings → System → Display → Graphics*), generation went from 21 to 34 tok/s in the same browser-based session.
 
@@ -284,7 +315,7 @@ At 48k context with `q8_0`/`q4_0` the process holds ~7.3 GB of 8 GB. **64k is th
 
 ## KV cache
 
-Keys are more sensitive to quantization than values, so K stays at `q8_0` and V drops to `q4_0`. This saves ~25 % of the KV cache compared with `q8_0`/`q8_0`. llama.cpp has no `q6` cache type. The options are `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0` and `iq4_nl`. A quantized V cache requires flash attention (`-fa on`).
+K at `q8_0` and V at `q4_0`, measured against an `f16` cache: 99.66 % same top token at 16k (99.83 % for `q8_0`/`q8_0`), and identical to `f16` on 510 of 512 tokens at 92k. There is no quality case against it, and `q8_0`/`q8_0` is not faster either (+2.7 % at 43k, for 12k less window). It saves ~25 % of the cache compared with `q8_0`/`q8_0`. Qwen3.6's cache is 3-33x more sensitive than Bonsai's and stays at `q8_0`/`q8_0`. Both are in [context-window.md](context-window.md#kv-cache-quality). llama.cpp has no `q6` cache type; `q5_0` is several times slower on the fork (PrismML-Eng/llama.cpp#191). The options are `f16`, `bf16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0` and `iq4_nl`. A quantized V cache requires flash attention (`-fa on`).
 
 ## Reasoning
 
@@ -342,7 +373,7 @@ The settings below keep the post-compaction state comfortably under the trigger 
 worst case inside the window. `install.sh pi` writes the two compaction keys into
 `$BONSAI_HOME/pi-agent/settings.json`.
 
-Because these five constrain each other, they live in `profiles/*.env` and move together.
+Because these five constrain each other, they live in a profile, `profiles/$MODEL/$PROFILE.env`, and move together.
 `PROFILE=dedicated` (default) is the 64k window below. `PROFILE=display` is the 48k set the
 measurements above were taken with - `CTX` 48000, `BUDGET` 4096, `MAX_TOKENS` 12000,
 `RESERVE_TOKENS` 12000, `KEEP_RECENT_TOKENS` 8000 - for a GPU that also renders a desktop
@@ -398,6 +429,36 @@ budget. The largest output was 11 441 tokens, 4k thinking plus a ~7k `write`, at
 context where the clamp still allowed the full 12 000. The same step just below the trigger
 would be cut off, so the tool-call allowance above is a typical case, not a bound.
 
+**96k, tried on 2026-09-26/27** (T-035's behaviour day). The window from
+[context-window.md](context-window.md#bonsai-windows-on-8-gb), `CTX` 96000 at `q4_0`/`q4_0` with
+`KEEP_RECENT_TOKENS` 16000 and the rest as `dedicated`, against the shipped 64k as the control. The
+Tron prompt, plain `bonsai-pi`, fresh directories; the 96k session ran a day before the control.
+Logs and `evaluate.sh`: `runs/T-035-bonsai-measured/day/` on the 4060 Ti machine.
+
+| | 96k, `q4_0`/`q4_0` | 64k, shipped |
+| --- | --- | --- |
+| Steps / duration | 163 / 158 min, aborted | 70 / 63 min |
+| Ended | no | on its own, in its first turn |
+| Compactions | 3, at 80.1-80.5k | 3, at 48.3-48.9k |
+| Context after one | 23-30k | 19-21k |
+| `length` stops / steps at the budget | 0 / 0 | 0 / 0 |
+| Largest thinking block | ~6.3k | ~6.9k |
+| tok/s per step, median, incl. prompt | 21.9 | 25.7 |
+| Result | host/join fails ("game not found") | runs, but turn-based, which makes it barely a game; rematch broken |
+
+**The arithmetic held at 96k.** The trigger sat at 80k as planned, compactions came back at
+23-30k, and the peak of 80.2k stayed inside the 95k verified clean. What went wrong was the process:
+the game was written in 20 minutes, then the model built its own test harness, a headless DOM in
+Node's `vm`, and spent from minute 58 to ~108 on one nested-quote escape in it (with `xxd`, `cmp`
+and scratch files), and the next 50 minutes on the harness again. It never went back to the game.
+Nothing in the log points at the window, so **64k stays `dedicated` for now**, and T-035 runs a
+second pair before that is final. The harness rabbit hole is also what the
+[agent prompt](#the-agent-prompt) now speaks to.
+
+The control is a reading on variance as much as on 64k: the same profile and prompt that built a
+working server-authoritative game on 2026-09-19 (the right-hand column above) built a turn-based
+one here. That is what n = 1 at temperature 1.0 is worth.
+
 ## Thinking in the prompt
 
 The chat template renders every earlier thinking block back into the prompt:
@@ -419,15 +480,35 @@ message, so that turn's own thinking is all preserved. It pays off across turns,
 a compaction, since pi feeds the summary back as a `user` message (`dist/core/messages.js`)
 which resets `last_query_index`.
 
-## Telling the model to think less
+## The agent prompt
 
-`$BONSAI_HOME/pi-agent/AGENTS.md`, installed from [`pi/pi-agents.md`](../pi/pi-agents.md), asks the model to
-decide one action and call the tool rather than drafting code inside the thinking block.
-pi loads it into the system prompt at startup; `--append-system-prompt` and
-`--system-prompt` are the per-run equivalents. Treat it as a nudge, not a control: the
-measurements under [Reasoning](#reasoning) show this model ignores instructions about
-thinking length, including the template's own effort levels. `BUDGET` remains the only
-thing that reliably stops it.
+`$BONSAI_HOME/pi-agent/AGENTS.md`, installed from [`pi/pi-agents.md`](../pi/pi-agents.md), goes
+into pi's system prompt at startup, for every session and both models; `--append-system-prompt`
+and `--system-prompt` are the per-run equivalents. It is written as a description of the
+situation with the reason for each point, not as rules, and that is a measured choice:
+
+- **Rules are checked with turns.** The localagent runs showed a model that over-attends to
+  everything in reach: "~80 lines" became `wc -l` five times, "read nothing else" became
+  orientation reads, a stated turn limit became a count. Every hard rule added there was ignored or
+  paid for in turns ([localagent.md](localagent.md#the-t-019-cli-run-where-the-turns-went)). So the
+  file carries no number, no "never" or "must", and nothing the model could verify with a tool.
+- **Thinking length is not a prompt matter.** This model ignores instructions about how long to
+  think, the template's effort levels included ([Reasoning](#reasoning)); `BUDGET` is what stops
+  it. The file only says why code belongs in the tool call: a block cut off at the budget loses
+  whatever was drafted in it.
+- **Each point answers a failure in a plain session**, not in the workflow. From the Tron runs
+  ([Context budget](#context-budget)): the 96k session that spent two hours debugging its own
+  headless-DOM test harness and never returned to the game; the Qwen session that wrote eleven
+  tests on a bug report and left the bug in place; the 4096 run that claimed test runs it never
+  did; leftover servers holding the ports of the next test.
+- **It stays task-neutral.** Nothing about games, browsers or the Tron prompt, which is the
+  benchmark: a prompt tuned to it would measure the prompt. That includes the HTML comment at
+  its top, which pi passes to the model with the rest, so the reasons live here and not there.
+
+The first version (until 2026-09-27) was four imperatives: think short, one step per turn, no
+restating, minimal tool arguments. None of it was ever measured against no file at all. The
+current one is unmeasured too; its reading is the next Tron pair in
+[T-035](../backlog/T-035-bonsai-measured.md).
 
 ## pi
 
@@ -589,6 +670,7 @@ be gone by the time this one starts. See [VRAM budget](#vram-budget).
 | `stopReason: length` well below `MAX_TOKENS`, near a compaction | pi's output clamp: `BUDGET` too large for `RESERVE_TOKENS - 4096`. See [Context budget](#context-budget). |
 | pi compacts every turn, most of the time goes into summarizing | `RESERVE_TOKENS`/`KEEP_RECENT_TOKENS` are unset or too large for `CTX`: `./install.sh pi`. See [Context budget](#context-budget). |
 | Vulkan: ~1.2x below the numbers here, GTT above 400 MiB at 16k | Mesa < 25.2: `RADV_PERFTEST=nogttspill` is ignored. `deps` warns; take `mesa-vulkan-drivers` from backports. See [Other GPU backends](#other-gpu-backends). |
+| Vulkan, Qwen: the first request fast, every later one on the same cache ~2x slower, GTT grows | `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM` is unset, e.g. a server started by hand rather than through `bonsai-server`. See [qwen.md](qwen.md#on-the-rx-570-vulkan). |
 | Vulkan: VRAM reads a few MiB right after load | Normal. RADV moves the weights into VRAM on the first request. Judge by tok/s, and read VRAM and GTT together. |
 | Vulkan: ~2x slower, VRAM ~20 MiB, GTT ~6 GB | `GGML_VK_PREFER_HOST_MEMORY` is set. It is checked for presence, so `=0` also turns it on: unset it. |
 | `vulkaninfo` lists no device, `deps` dies on it | Your user is not in the `render` group: `usermod -aG render $USER`, log in again. |

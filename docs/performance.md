@@ -70,13 +70,15 @@ in [VRAM budget](dev.md#vram-budget).
 ### The long-context gap
 
 At 40k, KV traffic is 1.07 GB per token, 16 % of the total. If efficiency held at the
-short-context 72 %, that would still give ~30 tok/s; the measured value is 25.1. The missing
-~13 % is the flash-attention kernel on *mixed* `q8_0`/`q4_0` cache types, not bandwidth.
+short-context 72 %, that would still give ~30 tok/s; the measured value is 25.1. About 13 % is
+missing.
 
-This is the one place with real headroom, and it sits in the CUDA kernel, not in configuration.
-Shrinking the KV cache further does not help enough to be worth it: halving it would buy ~8 %
-at long context only, against the quantization sensitivity that put K at `q8_0` in the first
-place (see [KV cache](dev.md#kv-cache)).
+It is **not** the flash-attention kernel for mixed cache types, which was the working assumption
+here. A same-type `q8_0`/`q8_0` cache gains only 2.7 % at 43k (26.4 against 25.7 tok/s), and
+`q4_0`/`q4_0`, with 30 % fewer KV bytes, is *slower* (24.3). So the KV bytes are not the lever in
+either direction, and the cause of the gap is open
+([context-window.md](context-window.md#bonsai-windows-on-8-gb)). It sits in a kernel, not in
+configuration.
 
 ## Speculative decoding: tried, rejected
 
@@ -147,6 +149,18 @@ real session reached 18k. More context means more material for n-gram matching, 
 could be somewhat better there. The practice run *was* at real context and still came out
 neutral, so the direction is consistent - but that is the gap to close if the question is
 reopened.
+
+### MTP: no head for this GGUF
+
+Multi-token prediction is a different mechanism from n-gram speculation: a trained head drafts
+from the model's own hidden state. On Qwen3.6-35B-A3B it adds 33-54 % on natural output
+([qwen.md](qwen.md#what-it-decides)). For Bonsai it is not available as shipped. The official GGUF
+has no MTP block (its tensors end at `blk.63`). The only head is a community one,
+`ProCreations/Ternary-Bonsai-2-27B-MTP`, trained against the PQ2_0 packing and shipped inside a
+7.66 GB PQ2_0 bundle that does not fit on 8 GB. Using it would take a merged PTQ1_0 file and a fork
+pin past PrismML-Eng/llama.cpp#205 (2026-09-21), which made in-file MTP loadable at all. That was
+decided against for now (T-035). A separate `-md` sidecar is no way around it: it duplicates the
+248k x 5 120 vocabulary, and #205 measured that as a net loss (5.2 against 16.6 tok/s).
 
 ## What is left
 

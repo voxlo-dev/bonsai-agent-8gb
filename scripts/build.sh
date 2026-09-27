@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
-# Builds llama-server from the pinned PrismML fork: static, CUDA or Vulkan (BACKEND), with the
-# patches from patches/$BACKEND applied. FORCE=1 rebuilds even when the pinned binary is there.
+# Builds llama-server from the tree the model file pins (the PrismML fork for Bonsai, mainline for
+# Qwen) into its own LLAMA_DIR: static, CUDA or Vulkan (BACKEND), with the model file's PATCH_DIR
+# applied. FORCE=1 rebuilds even when the pinned binary is there.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # The stamp names commit, backend and patch set, so a change to any of them triggers a rebuild.
-patch_dir="$ROOT/patches/$BACKEND"
 patches=()
-[[ -d "$patch_dir" ]] && mapfile -t patches < <(ls "$patch_dir"/*.patch 2>/dev/null | sort)
+patch_dir="$ROOT/${PATCH_DIR:-no-patches}"
+[[ -n "$PATCH_DIR" && -d "$patch_dir" ]] && mapfile -t patches < <(ls "$patch_dir"/*.patch 2>/dev/null | sort)
 want="$LLAMA_COMMIT $BACKEND $(cat "${patches[@]}" /dev/null | sha256sum | cut -c1-12)"
 # An unpatched CUDA build keeps the old stamp format, so existing installs do not rebuild for nothing.
 [[ "$BACKEND" == cuda && ${#patches[@]} -eq 0 ]] && want="$LLAMA_COMMIT"
@@ -23,7 +24,7 @@ case "$BACKEND" in
   vulkan) has glslc || die "glslc not found - run ./install.sh deps, or install the Vulkan SDK yourself (docs/dev.md#toolchain)" ;;
 esac
 
-log "fetching fork at ${LLAMA_COMMIT:0:7}"
+log "fetching ${LLAMA_REPO#https://github.com/} at ${LLAMA_COMMIT:0:7}"
 mkdir -p "$LLAMA_DIR"
 cd "$LLAMA_DIR"
 [[ -d .git ]] || { git init -q; git remote add origin "$LLAMA_REPO"; }
@@ -33,8 +34,8 @@ git checkout -q --force FETCH_HEAD
 # The checkout above is clean, so the patches always apply to the pinned tree, never on top
 # of themselves. Moving LLAMA_COMMIT means re-checking that they still apply.
 for p in "${patches[@]}"; do
-  log "applying patches/$BACKEND/$(basename "$p")"
-  git apply --check "$p" || die "patch does not apply to ${LLAMA_COMMIT:0:7} - the pin moved without rebasing patches/$BACKEND"
+  log "applying $PATCH_DIR/$(basename "$p")"
+  git apply --check "$p" || die "patch does not apply to ${LLAMA_COMMIT:0:7} - the pin moved without rebasing $PATCH_DIR"
   git apply "$p"
 done
 
