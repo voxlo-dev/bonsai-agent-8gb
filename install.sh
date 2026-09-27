@@ -38,7 +38,7 @@ for s in "${steps[@]}"; do
   case "$s" in
     deps)  log "step deps: apt toolchain for $BACKEND (asks for sudo)" ;;
     build) log "step build: compiling llama-server, typically 10-30 minutes" ;;
-    model) log "step model: ~5.6 GB, from the Hugging Face cache if it is there" ;;
+    model) log "step model: ~$((MODEL_DISK_MB / 1024)).$((MODEL_DISK_MB % 1024 * 10 / 1024)) GB, from the Hugging Face cache if it is there" ;;
     pi)    log "step pi: installing pi $PI_VERSION and writing its config" ;;
     link)  log "step link" ;;
   esac

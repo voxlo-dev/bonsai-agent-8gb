@@ -119,6 +119,57 @@ tests it never ran?
 - Whatever wins moves the profile files. A new `dedicated` also moves `README.md`'s "64k" and the
   `dev.md#context-budget` table, and gets the session added there as its measurement.
 
+## Phase 3 — results (2026-09-26/27)
+
+Scripts, server logs and session files: `runs/T-035-bonsai-measured/day/` (`evaluate.sh`
+reproduces the numbers). Step 0 passed first: 95 000 tokens at 96k read at 354 tok/s, no spill,
+so A ran at 96 000.
+
+| | A: Bonsai 96k `q4_0`/`q4_0` | B: Qwen3.6 131k (T-034) | C: Bonsai 64k, shipped |
+| --- | --- | --- | --- |
+| Wall time | 158 min, **aborted** | 36 min (7 to the first "done") | 63 min |
+| Steps | 163 | 101 (22 to the first "done") | 70 |
+| Output tokens | 184 462 | 60 114 | 85 510 |
+| Compactions | 3, at ~80.1-80.5k | **0**, peak context 76.8k | 3, at ~48.3-48.9k |
+| Context after each | 23-30k | – | 19-21k |
+| `stopReason: length` | 0 | 0 | 0 |
+| Largest thinking block | ~6.3k tokens (est.) | ~1.5k | ~6.9k |
+| tok/s per step, median, incl. prompt | 21.9 | 33.1 | 25.7 |
+| Ended on its own | no | yes, twice | yes, in its first turn |
+| **Result** (judged by hand) | "game not found": host/join fails | **runs**; the winner is not shown and rematch is broken, still broken after the second turn | runs, but plays turn-based: practically unplayable; rematch broken |
+
+Deviations from the protocol: A ran a day before B and C. B's second message was a bug report
+("The winning player is not displayed and rematching does not work. Test it and ge[t it to work]"),
+not the study's bare follow-up. C got no follow-up: it tested and finished in its first turn.
+
+**What A did.** The game was written in 20 minutes (`server.js` with `ws`, one `index.html`).
+Then it built its own test harness, a headless DOM in Node's `vm` (`test_full.js`), and from minute
+58 to ~108 debugged **one line of it**: a nested-quote escape in a `setVal` helper, taken apart
+with `xxd`, `cmp` and scratch files in `/tmp`. The next 50 minutes went to that harness again
+(leftover servers on its ports, promise handling, more probe scripts) and never back to the game,
+which does not host or join. **Nothing in the log is a context symptom**: no length stop, no
+thinking at the budget, compactions clean at 80k with 23-30k after, peak 80.2k inside the
+verified 92.7k. It is the rabbit hole of a self-built test harness, which C did not enter, at n = 1
+and temperature 1.0.
+
+**What B did.** First "done" after 7 minutes and 22 steps, with the game working. On the bug
+report it wrote 11 tests and fixed two bugs by its own account; rematch still does not work. It
+never came near a compaction and never thought long: the 16k `BUDGET` was not used once.
+
+The decision rules above, applied:
+
+- **Bonsai 96k does not become `dedicated`, not yet.** A did not end on its own, and its result is
+  worse than C's. C's game runs, but is barely a game, so "C works" holds only in part. The rule
+  says: stays at 64k, and one more A/C pair before that is final. The log gives no reason to blame
+  the window, which is exactly why a second pair is worth running rather than dropping 96k.
+- **The `display` candidate** waits with A.
+- **Qwen (B) meets "a working game ships it as supported"**: it runs, host/join and a round work,
+  and rematch is the one broken feature. It is also the only session that finished fast, never
+  compacted, and never came near its budget. The call on "supported with a known gap" is the
+  author's (T-034 phase 4). `BUDGET` 16384 stays: nothing in B asks for 8192.
+- Against the study's Qwen3.6 run (OpenCode, 64k, >60 min, 3 compactions, game broken), B differs in
+  harness, window and MTP at once, so it shows what this setup does, not which change did it.
+
 ## Phase 4 — the quality claim (was T-027)
 
 After the day, on the Bonsai profile that won: **Bonsai through OpenCode, twice**, with the study's

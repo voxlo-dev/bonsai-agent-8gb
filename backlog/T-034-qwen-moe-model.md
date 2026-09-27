@@ -62,6 +62,13 @@
 Session B of the behaviour day in [T-035](T-035-bonsai-measured.md#phase-3--the-behaviour-day-4060-ti-one-day-mostly-unattended),
 which holds the prompt, the order, the evaluation script and the decision rules for both models.
 
+**Run 2026-09-27**, details in [T-035's results](T-035-bonsai-measured.md#phase-3--results-2026-092627):
+36 min, 101 steps, no compaction (peak 76.8k of 131k), no length stop, 33.1 tok/s median per
+step. The game **runs**; first "done" after 7 minutes. The winner is not shown and rematch does not
+work, and after a bug report, 11 tests and two fixes rematch still does not. The best result of
+the three sessions of the day, and the only one that finished fast. Thinking never exceeded ~1.5k
+tokens, so the 16k `BUDGET` was never reached.
+
 ## Phase 4 — after the session
 
 - **Ships as supported** if its game works. The README's section loses "experimental",
