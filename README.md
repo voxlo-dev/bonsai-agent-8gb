@@ -227,8 +227,8 @@ a mixture-of-experts model whose experts live in system RAM while the card holds
 same 4060 Ti it runs a 131k window at 39-45 tok/s on natural output, with multi-token prediction.
 It needs **~28 GB of RAM** (under WSL2, raise `memory=` in `%UserProfile%\.wslconfig`), 22 GB of
 disk, and a mainline llama.cpp build next to the fork. On the RX 570 it runs too, at
-2.5-3.5x Bonsai's speed there, ~22 tok/s at 131k. It is measured for speed and cache
-quality, not yet in an agent session: [docs/qwen.md](docs/qwen.md).
+2.5-3.5x Bonsai's speed there, ~22 tok/s at 131k. In its one agent session so far it built the
+study's Tron game in 7 minutes, with rematch broken: [docs/qwen.md](docs/qwen.md#in-an-agent-session).
 
 ```bash
 MODEL=qwen36-35b ./install.sh       # its own build, model and pi config

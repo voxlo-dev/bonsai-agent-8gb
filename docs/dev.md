@@ -429,6 +429,36 @@ budget. The largest output was 11 441 tokens, 4k thinking plus a ~7k `write`, at
 context where the clamp still allowed the full 12 000. The same step just below the trigger
 would be cut off, so the tool-call allowance above is a typical case, not a bound.
 
+**96k, tried on 2026-09-26/27** (T-035's behaviour day). The window from
+[context-window.md](context-window.md#bonsai-windows-on-8-gb), `CTX` 96000 at `q4_0`/`q4_0` with
+`KEEP_RECENT_TOKENS` 16000 and the rest as `dedicated`, against the shipped 64k as the control. The
+Tron prompt, plain `bonsai-pi`, fresh directories; the 96k session ran a day before the control.
+Logs and `evaluate.sh`: `runs/T-035-bonsai-measured/day/` on the 4060 Ti machine.
+
+| | 96k, `q4_0`/`q4_0` | 64k, shipped |
+| --- | --- | --- |
+| Steps / duration | 163 / 158 min, aborted | 70 / 63 min |
+| Ended | no | on its own, in its first turn |
+| Compactions | 3, at 80.1-80.5k | 3, at 48.3-48.9k |
+| Context after one | 23-30k | 19-21k |
+| `length` stops / steps at the budget | 0 / 0 | 0 / 0 |
+| Largest thinking block | ~6.3k | ~6.9k |
+| tok/s per step, median, incl. prompt | 21.9 | 25.7 |
+| Result | host/join fails ("game not found") | runs, but turn-based, which makes it barely a game; rematch broken |
+
+**The arithmetic held at 96k.** The trigger sat at 80k as planned, compactions came back at
+23-30k, and the peak of 80.2k stayed inside the 95k verified clean. What went wrong was the process:
+the game was written in 20 minutes, then the model built its own test harness, a headless DOM in
+Node's `vm`, and spent from minute 58 to ~108 on one nested-quote escape in it (with `xxd`, `cmp`
+and scratch files), and the next 50 minutes on the harness again. It never went back to the game.
+Nothing in the log points at the window, so **64k stays `dedicated` for now**, and T-035 runs a
+second pair before that is final. The harness rabbit hole is also what the
+[agent prompt](#the-agent-prompt) now speaks to.
+
+The control is a reading on variance as much as on 64k: the same profile and prompt that built a
+working server-authoritative game on 2026-09-19 (the right-hand column above) built a turn-based
+one here. That is what n = 1 at temperature 1.0 is worth.
+
 ## Thinking in the prompt
 
 The chat template renders every earlier thinking block back into the prompt:

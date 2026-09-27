@@ -3,7 +3,9 @@
 `MODEL=qwen36-35b` serves Qwen3.6-35B-A3B instead of Bonsai. It is a mixture-of-experts model with
 35B parameters, 3B of them active per token. The experts live in system RAM; the card holds
 attention, the shared expert, the KV cache and the MTP head. **Experimental**: measured for speed
-and KV quality, not yet in an agent session. Bonsai stays the default.
+and KV quality, and in one agent session, where it built the study's game in 7 minutes with one
+feature broken ([below](#in-an-agent-session)). Whether that ships it as supported is open (T-034).
+Bonsai stays the default.
 
 It is also the slot for Qwen 4. If a Qwen 4 35B-A3B ships, it becomes a model file of its own plus
 one re-run of the measurement below. The code does not change.
@@ -110,11 +112,38 @@ has to raise `memory=` in `%UserProfile%\.wslconfig`; `preflight` checks for it.
 The budget is a starting point, not a measurement. It follows the rules in
 [dev.md](dev.md#context-budget): `RESERVE_TOKENS` >= `BUDGET` + a ~4k tool call + pi's 4096 clamp,
 and `KEEP_RECENT_TOKENS` at a real cost of 1.4-2x (~48k) is far below the 99k trigger. `BUDGET` is
-twice Bonsai's because the study measured this model at 91 % reasoning share. The agent session in
-T-034 phase 3 is what confirms or moves it.
+twice Bonsai's because the study measured this model at 91 % reasoning share. The
+[agent session](#in-an-agent-session) left it where it is: its thinking never came near 16k and
+its context never near the trigger, so nothing there asks for a change.
 
 Not tried: draft lengths other than 3, `UB` 1536 or 3072, `f16` for the cache (at 131k it costs
 ~1.3 GB more, three expert layers or the ubatch).
+
+## In an agent session
+
+T-035's behaviour day, 2026-09-27, on the 4060 Ti with the `dedicated` profile as shipped: the
+study's Tron prompt in a plain `bonsai-pi` session, next to two Bonsai sessions on the same prompt
+([dev.md](dev.md#context-budget)). Logs: `runs/T-035-bonsai-measured/day/` on that machine.
+
+| | |
+| --- | --- |
+| Wall time / steps | 36 min / 101; the first "done" after 7 min and 22 steps |
+| Output tokens | 60 114 |
+| Compactions | none: peak context 76.8k, against the trigger at 99k |
+| `length` stops | 0 |
+| Largest thinking block | ~1.5k tokens (est.), so `BUDGET` 16384 was never reached |
+| tok/s per step, median, incl. prompt | 33.1 |
+| Result, judged by hand | **runs**: two browsers log in, host and join, a round plays. The winner is not shown, and rematch does not work |
+
+The second message was a bug report on exactly those two ("The winning player is not displayed
+and rematching does not work. Test it and get it to work."), not the study's bare follow-up. The
+model wrote 11 tests and fixed two bugs by its own account; rematch still did not work.
+
+The best and the fastest of the day's three sessions, at n = 1. Against the study's run of this
+model (OpenCode, 64k, >60 min, three compactions, the canvas does not load) it differs in harness,
+window and MTP at once, so it shows what this setup does, not which change did it. Its thinking
+stayed short without the budget ever cutting it, unlike Bonsai, which drafts whole
+implementations in its thinking when nothing stops it ([dev.md](dev.md#reasoning)).
 
 ## On the RX 570 (Vulkan)
 

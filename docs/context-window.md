@@ -43,9 +43,11 @@ with thinking and code at the shipped sampling. `@43k` is a 42 803-token prompt,
 | 131 072 | q8_0/q8_0 `-nkvo` | 6 594 | 11.7 | 10.9 | 3.7 | 349 | – | – | tg @112k 1.8 |
 
 - **96 000 at `q4_0`/`q4_0` is the largest window that stays on the card**, 50 % more than the
-  shipped 64k. It costs ~6 % decode (33.5 against 35.7 short, 24.3 against 25.7 at 43k). Its
-  cleanness at depth is confirmed to 92 672 tokens (the prefill in the quality test below ran at
-  357 tok/s). The last ~3k to a full cache are unmeasured.
+  shipped 64k. It costs ~6 % decode (33.5 against 35.7 short, 24.3 against 25.7 at 43k). It is
+  clean to the end: the prefill in the quality test below read 92 672 tokens at 357 tok/s, and a
+  95 000-token prompt read at 354 tok/s (2026-09-26). It is not the default yet: its one agent
+  session compacted cleanly at ~80k but failed on something else, see
+  [dev.md](dev.md#context-budget).
 - **A same-type cache is not faster.** `q8_0`/`q8_0` gains 2.7 % at 43k and nothing at short
   context, for 12k less window. This settles the hypothesis that the mixed-type kernel explains
   the long-context gap (see [performance.md](performance.md#the-long-context-gap)).

@@ -1,6 +1,6 @@
 # T-034 — A second model: Qwen3.6-35B-A3B with the experts in RAM, as the slot Qwen 4 drops into
 
-- **Summary:** `MODEL=qwen36-35b` serves Qwen3.6-35B-A3B (MoE, 3B active) with its experts in system RAM, a 131k window and MTP drafting on mainline llama.cpp, next to Bonsai as the default. Measured and built; what is left is one agent session, the `display` profile checked once, and the decision whether it ships as supported. Qwen 4 35B-A3B, if it ships, becomes a model file and one re-run
+- **Summary:** `MODEL=qwen36-35b` serves Qwen3.6-35B-A3B (MoE, 3B active) with its experts in system RAM, a 131k window and MTP drafting on mainline llama.cpp, next to Bonsai as the default. Measured, built, and one agent session run (the Tron game in 7 minutes, rematch broken); what is left is the decision whether it ships as supported, and the `display` profile checked once. Qwen 4 35B-A3B, if it ships, becomes a model file and one re-run
 - **Category:** feature
 - **Importance:** medium
 - **Effort:** S left (phase 3 and 4)
