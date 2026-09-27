@@ -480,15 +480,35 @@ message, so that turn's own thinking is all preserved. It pays off across turns,
 a compaction, since pi feeds the summary back as a `user` message (`dist/core/messages.js`)
 which resets `last_query_index`.
 
-## Telling the model to think less
+## The agent prompt
 
-`$BONSAI_HOME/pi-agent/AGENTS.md`, installed from [`pi/pi-agents.md`](../pi/pi-agents.md), asks the model to
-decide one action and call the tool rather than drafting code inside the thinking block.
-pi loads it into the system prompt at startup; `--append-system-prompt` and
-`--system-prompt` are the per-run equivalents. Treat it as a nudge, not a control: the
-measurements under [Reasoning](#reasoning) show this model ignores instructions about
-thinking length, including the template's own effort levels. `BUDGET` remains the only
-thing that reliably stops it.
+`$BONSAI_HOME/pi-agent/AGENTS.md`, installed from [`pi/pi-agents.md`](../pi/pi-agents.md), goes
+into pi's system prompt at startup, for every session and both models; `--append-system-prompt`
+and `--system-prompt` are the per-run equivalents. It is written as a description of the
+situation with the reason for each point, not as rules, and that is a measured choice:
+
+- **Rules are checked with turns.** The localagent runs showed a model that over-attends to
+  everything in reach: "~80 lines" became `wc -l` five times, "read nothing else" became
+  orientation reads, a stated turn limit became a count. Every hard rule added there was ignored or
+  paid for in turns ([localagent.md](localagent.md#the-t-019-cli-run-where-the-turns-went)). So the
+  file carries no number, no "never" or "must", and nothing the model could verify with a tool.
+- **Thinking length is not a prompt matter.** This model ignores instructions about how long to
+  think, the template's effort levels included ([Reasoning](#reasoning)); `BUDGET` is what stops
+  it. The file only says why code belongs in the tool call: a block cut off at the budget loses
+  whatever was drafted in it.
+- **Each point answers a failure in a plain session**, not in the workflow. From the Tron runs
+  ([Context budget](#context-budget)): the 96k session that spent two hours debugging its own
+  headless-DOM test harness and never returned to the game; the Qwen session that wrote eleven
+  tests on a bug report and left the bug in place; the 4096 run that claimed test runs it never
+  did; leftover servers holding the ports of the next test.
+- **It stays task-neutral.** Nothing about games, browsers or the Tron prompt, which is the
+  benchmark: a prompt tuned to it would measure the prompt. That includes the HTML comment at
+  its top, which pi passes to the model with the rest, so the reasons live here and not there.
+
+The first version (until 2026-09-27) was four imperatives: think short, one step per turn, no
+restating, minimal tool arguments. None of it was ever measured against no file at all. The
+current one is unmeasured too; its reading is the next Tron pair in
+[T-035](../backlog/T-035-bonsai-measured.md).
 
 ## pi
 

@@ -1,9 +1,9 @@
 # T-035 — Measure Bonsai the way T-034 measures Qwen: window beyond 64k, the KV cache, and the quality run
 
-- **Summary:** Speed, window and KV quality are measured for both models and in the docs. Left: the behaviour day, one `bonsai-pi` session each for Bonsai at 96k, Bonsai at 64k and Qwen3.6 (T-034), which decides the new defaults, and then the study-harness run that puts the quality claim on the record (was T-027)
+- **Summary:** Speed, window, KV quality and the first behaviour day are measured and in the docs. 96k lost its first session to a self-built test harness, not to the window, so 64k stays for now. Left: a second A/C pair, on the new agent prompt, which decides 96k and gives the prompt its first reading; then the study-harness run that puts the quality claim on the record (was T-027)
 - **Category:** spike
 - **Importance:** high
-- **Effort:** M left (one unattended day, one evaluation, two OpenCode runs)
+- **Effort:** M left (one unattended half day, one evaluation, two OpenCode runs)
 - **Depends on:** the 4060 Ti machine; T-034's "Before phase 3" steps for session B
 
 ## Done
@@ -169,6 +169,35 @@ The decision rules above, applied:
   author's (T-034 phase 4). `BUDGET` 16384 stays: nothing in B asks for 8192.
 - Against the study's Qwen3.6 run (OpenCode, 64k, >60 min, 3 compactions, game broken), B differs in
   harness, window and MTP at once, so it shows what this setup does, not which change did it.
+
+Results are in [dev.md](../docs/dev.md#context-budget) (A, C), [qwen.md](../docs/qwen.md#in-an-agent-session)
+(B) and [context-window.md](../docs/context-window.md#bonsai-windows-on-8-gb) (step 0).
+
+## Phase 3b — the second pair, on the new agent prompt
+
+`pi/pi-agents.md` was rewritten after the day ([dev.md](../docs/dev.md#the-agent-prompt)): reasons
+instead of rules, and points on the failures above (A's harness, B's tests beside a live bug). The
+pair runs on it, both halves, so A2 against C2 still differs only in the window, and C2 against C
+gives the prompt a first, weak reading (n = 1, another day).
+
+1. `git pull`, then `./install.sh pi` once plainly and once with A's environment below, so both pi
+   dirs get the new `AGENTS.md`. Check `$PI_AGENT_DIR/AGENTS.md` starts with `## Working here`.
+2. A2 and C2 **back to back on the same day**, fresh directories, the protocol above exactly: the
+   Tron prompt, then the bare `Test it and get it to work.` once, when it says it is done. No bug
+   report this time.
+3. Optional, 40 minutes: **B2**, Qwen on the new prompt. The best session of the day should not get
+   worse, and it gives T-034's supported/experimental call a second run.
+4. Evaluate as before, plus three process questions per session, read from the log: did it build a
+   test setup of its own, and how long did it spend on that; did it run the product itself; does
+   its final summary separate what it ran from what it did not.
+
+Reading it:
+
+- **96k**: the rules above, unchanged. If A2 ends on its own with a result at least as good as C2's,
+  96k becomes `dedicated`, and the `display` candidate gets its desktop check.
+- **The prompt** stays if no session spends turns on the prompt itself (quoting it, checking its
+  points with tools) and C2 is no worse than C. A result that is better is welcome, not proof.
+  Worse, with the log showing why, reverts it.
 
 ## Phase 4 — the quality claim (was T-027)
 

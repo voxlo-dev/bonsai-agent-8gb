@@ -36,5 +36,5 @@ Remaining order: T-035 → T-017 comment posted. T-020 and T-029 follow the repo
 
 - [`T-020`](T-020-supported-hardware.md) Finish the hardware table — 12/16 GB profiles and the rows that hardware reports bring in; the three tiers are already in the README · decision · medium · M
 - [`T-024`](T-024-public-repo-setup.md) Public repo setup — done except confirming the two issue templates render · chore · low · S
-- [`T-035`](T-035-bonsai-measured.md) Measure Bonsai the way T-034 measures Qwen — speed, window and KV quality done (docs/context-window.md); left: the behaviour day (Bonsai 96k, Bonsai 64k, Qwen) that decides the new defaults, then the study-harness run twice for the quality claim; was T-027 and T-033 · spike · high · M
+- [`T-035`](T-035-bonsai-measured.md) Measure Bonsai the way T-034 measures Qwen — speed, window, KV quality and the behaviour day done (96k not yet: its session lost itself in a test harness); left: a second 96k/64k pair on the new agent prompt, then the study-harness run twice for the quality claim; was T-027 and T-033 · spike · high · M
 - [`T-029`](T-029-upstream-watch.md) Watch mainline — move off the fork when ggml-org takes PTQ1_0 (#29077), keep the Vulkan patch alive · decision · medium · M
