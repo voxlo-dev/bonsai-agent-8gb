@@ -20,7 +20,7 @@ in system RAM while the card holds the rest. More RAM, a bigger model:
 | any | [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf), all on the card | 36 tok/s | 64k | small, well-scoped tasks |
 | **32 GB** | **[Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)** | **52-65 tok/s** | **131k** | **most work: fast, and the default** |
 | 64 GB | [Qwen3.8-Flash-Next](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF), 125B | ~19 tok/s | 131k | the strongest, for when it may take longer |
-| 64 GB | [Kolibri-1](https://huggingface.co/Aleph-Alpha/Kolibri-1), 78B, on a patched llama.cpp | ~44 tok/s | 131k | German and English; not yet in an agent session ([details](docs/kolibri1.md)) |
+| 64 GB | [Kolibri-1](https://huggingface.co/Aleph-Alpha/Kolibri-1), 78B, on a patched llama.cpp | ~44 tok/s | 131k | German and English; no valid agent session yet ([details](docs/kolibri1.md)) |
 
 `./install.sh` reads your RAM, shows which of them run, and asks. How they did as agents on
 the same task: [the agent sessions](docs/agent-sessions.md).
