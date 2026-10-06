@@ -20,7 +20,7 @@ incomplete, and a change that contradicts one needs a new measurement, not an ar
 | Path | Role |
 | --- | --- |
 | `config.env` | **Single source of truth.** Every setting, with `: "${VAR:=default}"` so an environment variable always wins. Sources the profile, then the model file |
-| `models/{bonsai,qwen36-35b,qwen38-flash}.env` | Per `MODEL` (the environment, else `$QWEN_HOME/model.env` from `install.sh`, else `qwen36-35b`): the GGUF pin, the llama.cpp tree that runs it (`LLAMA_*`, `PATCH_DIR`), KV types, `EFFORT`, `SPEC_TYPE`, the vision projector (`MMPROJ_*`), what preflight checks (disk, RAM, backends) and how the model list shows it (`MODEL_TITLE`, `MODEL_ROLE`); `SERVER_ARGS` for flags no setting covers |
+| `models/{bonsai,qwen36-35b,qwen38-flash,kolibri1}.env` | Per `MODEL` (the environment, else `$QWEN_HOME/model.env` from `install.sh`, else `qwen36-35b`): the GGUF pin, the llama.cpp tree that runs it (`LLAMA_*`, `PATCH_DIR`), KV types, `EFFORT`, `SPEC_TYPE`, the vision projector (`MMPROJ_*`), what preflight checks (disk, RAM, backends) and how the model list shows it (`MODEL_TITLE`, `MODEL_ROLE`); `SERVER_ARGS` for flags no setting covers |
 | `models/trees/unsloth.env` | Unsloth's llama.cpp pin, sourced by both Qwen model files on CUDA since they share its build dir. Not a model: the model list reads `models/*.env` only |
 | `profiles/{model}/{dedicated,display}.env` | `CTX` and the four budget values, per model and GPU situation (`PROFILE`, default `dedicated`); for the MoE also `CPU_MOE` and `UB`. They constrain each other, so they move together |
 | `install.sh` | Step runner: `deps build model pi link`, all of them by default. Without `MODEL` and `model.env` it asks for the model by the RAM (on a terminal) and records it; then runs `preflight` |
@@ -28,9 +28,10 @@ incomplete, and a change that contradicts one needs a new measurement, not an ar
 | `scripts/lib.sh` | Sourced first by every step; sources `config.env` and defines `log`/`warn`/`die`/`has`, and the model list by RAM that `install.sh` and preflight share (`print_ramp`, `recommended_model`) |
 | `scripts/{deps,build,model,pi}.sh` | One install step each, individually re-runnable and idempotent. `deps` and `build` branch on `BACKEND` (`cuda`, `vulkan`); `build` fetches a git commit, or a checksummed release tarball (`LLAMA_TARBALL`) where the commit is not fetchable (Unsloth's tree) |
 | `scripts/server-flags.sh` | The llama-server flags and environment of the selected model and profile, sourced by both launchers. Long spellings only: Unsloth Studio's parser misreads short clusters |
-| `patches/{backend}/*.patch` | Applied by `build` to the fork at `LLAMA_COMMIT`, in name order, for that backend only, and only for a model whose `PATCH_DIR` names them (Bonsai). Today: the PTQ1_0 Vulkan decode, until upstream takes it (T-017) |
+| `patches/{backend}/*.patch`, `patches/kolibri1/` | Applied by `build` to the model's tree at `LLAMA_COMMIT`, in name order, for a model whose `PATCH_DIR` names them. Bonsai: the PTQ1_0 Vulkan decode per backend, until upstream takes it (T-017). Kolibri-1: the `kolibri1` architecture, from the GGUF's repository, on both backends |
 | `bin/qwen-server` | The launcher. Sources `config.env` **directly**, not through `lib.sh`, then `scripts/server-flags.sh` |
 | `bin/qwen-studio` | Opens the same model in Unsloth Studio (`unsloth studio run`) on this repo's build, with the flags from `server-flags.sh` passed through. Same sourcing as `qwen-server` |
+| `bin/kolibri`, `bin/kolibri-{server,pi,studio}` | The three links run the `qwen-*` command of the same suffix with `MODEL=kolibri1` |
 | `bin/qwen-pi` | Starts the pinned pi with `PI_CODING_AGENT_DIR` set to `PI_AGENT_DIR`, and starts/stops `qwen-server` around it when none runs. State in `$QWEN_HOME/run/`. Same sourcing as `qwen-server` |
 | `pi/pi-agents.md` | Runtime artifact, copied to `$PI_AGENT_DIR/AGENTS.md`. **Not this file** |
 | `pi-bg-bash` | Third-party pi extension, pinned in `config.env`, fetched by `scripts/pi.sh`: bash gets a `background` flag, a call still running after 120 s becomes a background task. Why: `docs/agent.md#background-tasks` |
@@ -114,7 +115,7 @@ Every fact has one home, chosen by how long it stays true.
 | `docs/setup.md` | durable | build, toolchain, platforms, RAM and build memory, preflight, troubleshooting |
 | `docs/agent.md` | durable | pi, the context budget and its arithmetic, the agent prompt, vision, the server lifecycle, Unsloth Studio |
 | `docs/agent-sessions.md` | durable | every Tron session, all models, one table plus each day's write-up. A new session is a row here |
-| `docs/{bonsai,qwen36,qwen38-flash}.md` | durable | one per `MODEL`: its pin and tree, why each of its settings, its speed, window and profiles. A new model gets its own |
+| `docs/{bonsai,qwen36,qwen38-flash,kolibri1}.md` | durable | one per `MODEL`: its pin and tree, why each of its settings, its speed, window and profiles. A new model gets its own |
 | `docs/performance.md` | durable | what limits generation speed: the bandwidth roofline, and the optimizations tried and rejected |
 | `docs/context-window.md` | durable | the window and the KV cache for both models: what fits on 8 GB, the silent WSL2 spill, KV quality against f16 |
 | `docs/localagent.md` | durable | the frozen workflow: why it is not recommended, its shape, how it runs on pi, the measured runs |

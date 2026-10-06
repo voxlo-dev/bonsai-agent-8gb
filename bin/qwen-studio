@@ -31,6 +31,11 @@ case "$SPEC_TYPE" in
   *) die "SPEC_TYPE=$SPEC_TYPE has no Unsloth Studio equivalent here (draft-mtp or none)" ;;
 esac
 
+# Studio refuses a top-k above 100; Kolibri-1's card asks for 128. Clamped, since its top-p of
+# 0.97 leaves ranks past 100 almost no mass (docs/kolibri1.md#settings).
+top_k="$SAMPLING_TOP_K"
+((top_k <= 100)) || top_k=100
+
 # Studio's default memory mode, auto, keeps an explicitly requested window and appends the flags
 # below after its own, so the profile's placement wins (--fit off, every layer on the card, the
 # experts of CPU_MOE layers in RAM). Its manual mode would strip them and has no option for the
@@ -38,7 +43,7 @@ esac
 # options pin the values over what the UI or a request would send.
 args=(studio run --model "$MODEL_PATH" --context-length "$CTX"
   --parallel 1 --speculative-type "$spec"
-  --temperature "$SAMPLING_TEMP" --top-p "$SAMPLING_TOP_P" --top-k "$SAMPLING_TOP_K" --min-p "$SAMPLING_MIN_P"
+  --temperature "$SAMPLING_TEMP" --top-p "$SAMPLING_TOP_P" --top-k "$top_k" --min-p "$SAMPLING_MIN_P"
   "${LOAD_FLAGS[@]}"
   # Studio picks a vision projector from beside the GGUF itself, where it may find another model's,
   # and refuses --mmproj, so VISION does not reach it: text only. See docs/agent.md#unsloth-studio.

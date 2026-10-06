@@ -15,8 +15,10 @@ link() {
     [[ -L "$HOME/.local/bin/$b" && ! -e "$HOME/.local/bin/$b" ]] && rm -f "$HOME/.local/bin/$b" \
       && log "removed the old link ~/.local/bin/$b"
   done
-  for b in qwen-server qwen-pi qwen-studio; do ln -sf "$ROOT/bin/$b" "$HOME/.local/bin/$b"; done
-  log "linked qwen-server, qwen-pi and qwen-studio into ~/.local/bin"
+  for b in qwen-server qwen-pi qwen-studio kolibri-server kolibri-pi kolibri-studio; do
+    ln -sf "$ROOT/bin/$b" "$HOME/.local/bin/$b"
+  done
+  log "linked qwen-{server,pi,studio} and kolibri-{server,pi,studio} into ~/.local/bin"
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || warn "~/.local/bin is not on PATH"
 }
 
@@ -103,5 +105,7 @@ for s in "${steps[@]}"; do
 done
 current=""
 run=qwen-pi
-[[ "$(sed -n 's/^MODEL=//p' "$model_file" 2>/dev/null)" == "$MODEL" ]] || run="MODEL=$MODEL qwen-pi"
+if [[ "$MODEL" == kolibri1 ]]; then run=kolibri-pi
+elif [[ "$(sed -n 's/^MODEL=//p' "$model_file" 2>/dev/null)" != "$MODEL" ]]; then run="MODEL=$MODEL qwen-pi"
+fi
 log "done - start the agent in a project directory with: $run (it starts qwen-server itself)"
