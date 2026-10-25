@@ -15,6 +15,11 @@ flag, a cache type, a token count - answers a failure observed on real hardware,
 lives in `docs/` with the measurement behind it ([`docs/dev.md`](docs/dev.md) says where). A change without one is
 incomplete, and a change that contradicts one needs a new measurement, not an argument.
 
+## Current sprint
+
+`agent-bench` - [`artefacts/agent-bench/sprint.md`](artefacts/agent-bench/sprint.md). Its branch
+lives on the private fork only (`bench/README.md`).
+
 ## Map
 
 | Path | Role |
@@ -123,6 +128,7 @@ Every fact has one home, chosen by how long it stays true.
 | `docs/localagent.md` | durable | the frozen workflow: why it is not recommended, its shape, how it runs on pi, the measured runs |
 | `docs/model-comparison.md` | durable | eight local models as coding agents on 8 GB, from the study predating this repo. **Frozen**: a record of finished work. New measurements go to the file that holds the topic, or a ticket |
 | `backlog/` | living | one file per ticket, `T-NNN-{slug}.md`, indexed in `backlog.md` with the `Next ticket` counter. A private one gets `.local.md` and stays out of the repo, so the numbers have gaps |
+| `artefacts/{sprint}/` | living until the sprint closes | the sprint file: goal, non-goals, decisions, and the board indexing its tickets |
 | `runs/` | ephemeral | gitignored but kept: one folder per long measurement |
 | `.temp/` | ephemeral | gitignored scratch, safe to delete at any time |
 
