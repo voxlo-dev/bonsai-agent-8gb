@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Starts the pinned pi with its own config in PI_AGENT_DIR, set up for qwen-server.
-# A global pi and ~/.pi are not used. Arguments go straight to pi.
+# A global pi and ~/.pi are not used, nor discovered skills (~/.agents/skills, a project's
+# .agents/skills); --skill still loads one. Arguments go straight to pi.
 # With SERVER_AUTOSTART, starts qwen-server in the background when none is running and stops it
 # once the last qwen-pi session ends - only for a server on this machine; a remote SERVER_HOST
 # is expected to be serving already. Rationale: docs/agent.md#server-lifecycle.
@@ -121,5 +122,5 @@ trap : INT
 status=0
 # The extensions read their limits from the environment, so config.env stays the source.
 export LOCALAGENT_MAX_TURNS="$AGENT_MAX_TURNS" LOCALAGENT_AGENT_MODEL="local/$AGENT_MODEL_ID"
-PI_CODING_AGENT_DIR="$PI_AGENT_DIR" "$PI_BIN" "$@" 9>&- || status=$?
+PI_CODING_AGENT_DIR="$PI_AGENT_DIR" "$PI_BIN" --no-skills "$@" 9>&- || status=$?
 exit "$status"

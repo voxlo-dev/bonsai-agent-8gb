@@ -157,6 +157,12 @@ already in use there:
 A project directory's own `.pi/settings.json` still applies to both instances; that is
 pi's per-project override and intended.
 
+Skills are not: `qwen-pi` starts pi with `--no-skills`. pi otherwise discovers every skill in
+`~/.agents/skills` and in each `.agents/skills` from the working directory up to the repository
+root - the skills of whatever other agent the user runs - and lists them all in the system prompt.
+On this machine that was 17 workflow skills, ~8.6k characters, about 2k tokens of every request in
+a 64k window, for skills written for another agent. `--skill <path>` still loads one on purpose.
+
 pi reads providers from `models.json`. `contextWindow` decides when pi compacts, together with the settings under [Context budget](#context-budget) - not `maxTokens`, which is only the per-turn output cap. Unsloth's `unsloth start pi` hard-codes `maxTokens = min(context / 4, 8192)`, which cuts a single long reasoning turn off at 8k. That is why this setup uses its own config.
 
 ### Background tasks
