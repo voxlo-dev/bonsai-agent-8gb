@@ -152,7 +152,7 @@ already in use there:
 - `AGENTS.md`, telling the model to think briefly on a small window, went into every
   model's system prompt - or, when the user had their own, ours was skipped.
 - Whatever pi version was installed ran, while the budget arithmetic under
-  [Context budget](#context-budget) reads pi 0.85.1's compaction code.
+  [Context budget](#context-budget) reads the compaction code of the pinned `PI_VERSION`.
 
 A project directory's own `.pi/settings.json` still applies to both instances; that is
 pi's per-project override and intended.
