@@ -220,7 +220,7 @@ reached the study's follow-up.
 - **Sharp stays open.** ES ran clearly better on every count of the process: it ended on its
   own, in 89 steps against 198, with 25 % less output, no compaction against two, and 175 active
   minutes against 242 without an end. One pair at temperature 1.0, with different interruptions,
-  is not enough to wire it: T-050 runs it as one of its variables. Until then no
+  is not enough to wire it: the bench baseline (T-061) runs it as one of its variables. Until then no
   `CHAT_TEMPLATE_FILE` setting; the pinned template stays in `runs/T-041-tron-day-2/`.
 - **Flash builds too much.** Both sessions reached for sound, custom fonts, visual effects and a
   test setup that needed debugging of its own, the pattern A showed for Bonsai. D, the same model
@@ -231,5 +231,5 @@ reached the study's follow-up.
   pi now moves a hung command to the background ([agent.md](agent.md#background-tasks)).
 - **This test does not separate the candidates any more.** The outcome of one Tron session is
   close to chance: Bonsai built a working game in a first, undocumented run and never again,
-  Qwen3.6 went from B's to B2's, Flash from D to E. A reproducible test is T-050.
+  Qwen3.6 went from B's to B2's, Flash from D to E. A reproducible test is the bench (T-055 to T-061).
 
