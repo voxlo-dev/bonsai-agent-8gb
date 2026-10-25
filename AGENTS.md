@@ -37,6 +37,8 @@ incomplete, and a change that contradicts one needs a new measurement, not an ar
 | `pi-bg-bash` | Third-party pi extension, pinned in `config.env`, fetched by `scripts/pi.sh`: bash gets a `background` flag, a call still running after 120 s becomes a background task. Why: `docs/agent.md#background-tasks` |
 | `pi/extensions/localagent/` | pi extension behind `qwen-pi --localagent`: the `dispatch` tool, and the session's `hasUI` for the plan gate. **Frozen, not recommended**: see below |
 | `pi/localagent-workflow/` | The workflow it runs: skill, five agent prompts (orchestrator, scaffold, worker, e2e, docs), templates. Descended from the author's seven-agent workflow in `docs/model-comparison.md`; every cut since is measured in `docs/localagent.md` |
+| `bench/` | The agent bench (T-055 to T-065). `tasks/` is the author's private task set: never read, written or proposed by an agent except a task handed over for formatting, never pushed to a public remote. `examples/` is public, format only |
+| `scripts/git-hooks/pre-push` | Refuses a push to any remote not in `bench.privateRemote` when a pushed commit touches `bench/tasks/`. Enabled per clone with `git config core.hooksPath scripts/git-hooks` |
 
 ## Four things that bite
 

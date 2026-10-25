@@ -70,6 +70,19 @@ you checked.
    and sits about 3x off what the card's memory bandwidth allows. A dedicated `mul_mat_vec` shader
    is the open piece.
 
+## The bench task set
+
+`bench/` measures local models on tasks with a hidden checker. The tasks themselves are not in the
+public repo, and pull requests adding tasks to it will be declined: a task that is published can
+be crawled into the next model's training data, and from then on the bench measures memory, not
+ability. The same goes for re-building a public benchmark - its tasks are already out there.
+
+The maintainer's set lives in `bench/tasks/` in a private fork. `scripts/git-hooks/pre-push`
+refuses any push to a remote not named in `bench.privateRemote` when a commit in the pushed range
+touches `bench/tasks/`, history included; with no private remote configured it refuses all of
+them. Enable it once per clone ([`bench/README.md`](bench/README.md)). To use the bench, write
+your own tasks in the format of `bench/examples/` and keep them private the same way.
+
 ## What will probably be declined
 
 - A test framework.
