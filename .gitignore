@@ -43,3 +43,4 @@ runs/
 
 # Promotion material (LinkedIn cards), kept locally
 assets/
+__pycache__/
