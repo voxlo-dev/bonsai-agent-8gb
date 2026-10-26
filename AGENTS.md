@@ -42,7 +42,8 @@ lives on the private fork only (`bench/README.md`).
 | `pi-bg-bash` | Third-party pi extension, pinned in `config.env`, fetched by `scripts/pi.sh`: bash gets a `background` flag, a call still running after 120 s becomes a background task. Why: `docs/agent.md#background-tasks` |
 | `pi/extensions/localagent/` | pi extension behind `qwen-pi --localagent`: the `dispatch` tool, and the session's `hasUI` for the plan gate. **Frozen, not recommended**: see below |
 | `pi/localagent-workflow/` | The workflow it runs: skill, five agent prompts (orchestrator, scaffold, worker, e2e, docs), templates. Descended from the author's seven-agent workflow in `docs/model-comparison.md`; every cut since is measured in `docs/localagent.md` |
-| `bench/` | The agent bench (T-055 to T-065). `tasks/` is the author's private task set: never read, written or proposed by an agent except a task handed over for formatting, never pushed to a public remote. `examples/` is public, format only |
+| `bench/` | The agent bench (T-055 to T-065): `image.sh` builds the image every attempt runs in, `run.py attempt` runs one task, `bench/README.md` says how. `tasks/` is the author's private task set: never read, written or proposed by an agent except a task handed over for formatting, never pushed to a public remote. `examples/` is public, format only. Runs outside the Claude sandbox |
+| `test/smoke/bench-attempt.sh` | The repo's one test: one attempt of `bench/examples/hello` against the running server must pass |
 | `scripts/git-hooks/pre-push` | Refuses a push to any remote not in `bench.privateRemote` when a pushed commit touches `bench/tasks/`. Enabled per clone with `git config core.hooksPath scripts/git-hooks` |
 
 ## Four things that bite
@@ -80,12 +81,14 @@ qwen-pi                            # starts the server itself
 Unversioned: the repo pins what matters instead. Each step checks whether its work is done and
 exits early, so a second run is cheap and says so.
 
-**There is no test suite.** Adding one was considered and declined: it is bash, there is no
-framework, and what breaks is behaviour under a real model on a real card. Verify by observation.
+**There is no test suite** for the install scripts: it is bash, there is no framework, and what
+breaks is behaviour under a real model on a real card. Verify by observation. The bench is the
+exception, with one smoke script, `test/smoke/bench-attempt.sh`: it has a deterministic happy path.
 
 | Change | How to see it worked |
 | --- | --- |
 | Any script | `bash -n`, and run the step twice to confirm it is still idempotent |
+| The bench | `test/smoke/bench-attempt.sh` outside the sandbox, with the server running |
 | Preflight | run it where it should fail (no GPU, wrong `BACKEND`, too little disk): one screen, nothing touched |
 | Server flags | start it, query `http://127.0.0.1:8080/props`, or render a conversation through `/apply-template` |
 | A window, a profile, a tree or a build flag | fill it: one prompt to `CTX - RESERVE_TOKENS` in full ubatches, `nvidia-smi` alongside (`runs/T-049-flash-deep/`). A window that loads is not a window that holds: the CUDA pool grows outside the reserved buffers |
