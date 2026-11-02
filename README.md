@@ -20,8 +20,9 @@ in system RAM while the card holds the rest. More RAM, a bigger model:
 | any | [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf), all on the card | 40 tok/s | 64k | small, well-scoped tasks |
 | **32 GB** | **[Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)** | **52-65 tok/s** | **131k** | **most work: fast, and the default** |
 | 64 GB | [Qwen3.8-Flash-Next](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF), 125B | ~19 tok/s | 131k | the strongest, for when it may take longer |
+| 64 GB | [Kolibri-1](https://huggingface.co/Aleph-Alpha/Kolibri-1), 78B, on a patched llama.cpp | ~44 tok/s | 131k | German and English; no valid agent session yet ([details](docs/kolibri1.md)) |
 
-`./install.sh` reads your RAM, shows which of the three run, and asks. How they did as agents on
+`./install.sh` reads your RAM, shows which of them run, and asks. How they did as agents on
 the same task: [the agent sessions](docs/agent-sessions.md).
 
 ## Install
@@ -57,6 +58,9 @@ The server is also a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/
 tool. `qwen-studio` opens the same model with the same settings in
 [Unsloth Studio](https://github.com/unslothai/unsloth)'s chat UI, at the same speed and VRAM:
 [details](docs/agent.md#unsloth-studio).
+
+Kolibri-1 has its own three: `kolibri-pi`, `kolibri-server` and `kolibri-studio` run it whatever
+model is recorded, after `MODEL=kolibri1 ./install.sh`.
 
 ## Speed
 
@@ -150,7 +154,7 @@ the CUDA toolkit. Drivers, toolkit versions, Node for pi and what `deps` install
 | `build` | the model's llama.cpp tree at its pinned version (`FORCE=1` rebuilds) |
 | `model` | the GGUF, from the Hugging Face cache or downloaded, checksummed |
 | `pi` | its own pinned pi with a config for the model and [pi-bg-bash](https://github.com/gvanderclay/pi-bg-bash) for background commands; your own pi and `~/.pi` stay untouched |
-| `link` | `qwen-server`, `qwen-pi` and `qwen-studio` into `~/.local/bin` |
+| `link` | `qwen-server`, `qwen-pi`, `qwen-studio` and their `kolibri-*` twins into `~/.local/bin` |
 
 The model you pick is recorded in `$QWEN_HOME/model.env` and used by every `qwen-*` command. A
 second one installs next to it with `MODEL=bonsai ./install.sh` and runs with `MODEL=bonsai qwen-pi`.
@@ -169,6 +173,7 @@ as coding agents on an 8 GB card: [docs/model-comparison.md](docs/model-comparis
 
 ```bash
 rm -rf ~/.local/share/qwen-local ~/.local/bin/qwen-server ~/.local/bin/qwen-pi ~/.local/bin/qwen-studio
+rm -f ~/.local/bin/kolibri-server ~/.local/bin/kolibri-pi ~/.local/bin/kolibri-studio
 rm -rf ~/.local/state/pi-bg   # pi-bg-bash's task logs
 ```
 
