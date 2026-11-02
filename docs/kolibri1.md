@@ -5,7 +5,7 @@
 and English (Apache-2.0): 78B, 384 experts of which 6 are active plus one shared expert, 3.5B
 parameters per token, 50 layers. Every routed expert stays in RAM, so like Qwen3.8-Flash it needs a
 64 GB machine; it decodes at Qwen3.6's speed. Measured for load and speed only (2026-10-05): its
-window is not filled, and its one agent session copied another model's work (T-073).
+window is not filled, and its one agent session copied another model's work (the campaign's tier 2, T-082).
 
 **What it needs.** [Hob-forge/Kolibri-1-GGUF](https://huggingface.co/Hob-forge/Kolibri-1-GGUF),
 `Q4_K_M`, one file of 47.5 GB: routed experts 42.6 GiB, the rest 1.6 GiB. An independent conversion
@@ -74,6 +74,6 @@ card. At ~60 GB/s for dual-channel DDR5 (not measured on this machine) and the c
 ## Open
 
 The first agent session was invalid: it copied another model's result and handed it in as its
-own ([agent-sessions.md](agent-sessions.md#k-kolibri-1-copied-b2)). T-073: fill the window with `nvidia-smi` alongside, the expert layers that fit next to it, prompt
+own ([agent-sessions.md](agent-sessions.md#k-kolibri-1-copied-b2)). T-082: fill the window with `nvidia-smi` alongside, the expert layers that fit next to it, prompt
 speed at depth, and whether llama.cpp's default 8 GB prompt cache in RAM (`--cache-ram`) pushes
 experts out of the page cache, as it does for Qwen3.8-Flash. Then an agent session.

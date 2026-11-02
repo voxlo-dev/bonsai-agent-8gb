@@ -226,7 +226,7 @@ decodes at 18.7-19.6 tok/s short, natively with every expert cached
 **A smaller quant is the lever left for short decode.** From the GGUF headers and the split
 above: UD-IQ3_XXS (experts 45.3 GiB, 82 % of the bytes per token) predicts ~22-23 tok/s short,
 UD-Q2_K_XL (42.9 GiB) ~24, if their IQ2 kernels stay bandwidth-bound on 8 cores. Neither quality
-is measured for this model; that trial is T-052.
+is measured for this model; the campaign's tier 1 (T-081) tries ISTA-DASLab's GSQ quants instead.
 
 ## Reproducing
 

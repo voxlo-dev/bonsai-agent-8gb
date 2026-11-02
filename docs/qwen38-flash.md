@@ -281,6 +281,6 @@ Three Tron sessions ([agent-sessions.md](agent-sessions.md)): D (2026-09-29, und
 54 minutes with a game whose rematch works; E and ES (T-046, 2026-10-03/04, native) did not end
 inside 90 minutes, both building sound, fonts and test setups of their own. ES ran with the Sharp
 chat template and ran clearly better on process (ended on its own, 89 steps against 198), one pair
-only, so it is not wired yet and the bench baseline (T-061) validates it: the pinned template and its render
+only, so it is not wired yet and the bench campaign's tier 1 (T-081) validates it: the pinned template and its render
 check against Flash's own (Sharp makes the same two changes as on Bonsai; Flash's own template
 renders what pi sends byte for byte like Bonsai's) are in `runs/T-041-tron-day-2/`.
