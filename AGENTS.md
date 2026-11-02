@@ -17,8 +17,8 @@ incomplete, and a change that contradicts one needs a new measurement, not an ar
 
 ## Current sprint
 
-`agent-bench` - [`artefacts/agent-bench/sprint.md`](artefacts/agent-bench/sprint.md). Its branch
-lives on the private fork only (`bench/README.md`).
+None. The bench campaign runs without one, model by model: [`backlog/bench-campaign.md`](backlog/bench-campaign.md).
+It runs on the branch `agent-bench`, which lives on the private fork only (`bench/README.md`).
 
 ## Map
 

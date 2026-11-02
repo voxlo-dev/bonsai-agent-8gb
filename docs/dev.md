@@ -15,6 +15,7 @@ on 2026-10-03, T-047):
 | [kolibri1.md](kolibri1.md) | Kolibri-1: the patched mainline tree and its build number, settings, window by arithmetic, speed |
 | [context-window.md](context-window.md) | windows and KV quality for both models side by side |
 | [performance.md](performance.md) | Bonsai's bandwidth roofline, the optimizations tried and rejected; Qwen3.8-Flash's CPU experts |
+| [../bench/README.md](../bench/README.md) | the agent bench: task kinds and layout, generated tasks, attempts and verdicts, configurations and the fit check, runs, budgets, result reuse |
 
 ## Old anchors
 
