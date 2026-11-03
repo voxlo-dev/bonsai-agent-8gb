@@ -131,8 +131,13 @@ twice Bonsai's because the study measured this model at 91 % reasoning share. Th
 [agent session](agent-sessions.md#b-qwen36) left it where it is: its thinking never came near 16k and
 its context never near the trigger, so nothing there asks for a change.
 
-Not tried: draft lengths other than 3, `UB` 1536 or 3072, `f16` for the cache (at 131k it costs
-~1.3 GB more, three expert layers or the ubatch).
+Draft length 2, which Unsloth's page names best in most setups, against the default 3 on
+UD-Q4_K_XL at 131k (bench run `q36-xl`, one speed test each): +5-7 % decode on short prompts,
+-9 % at 32k, -10 % at 64k, -13 % at 98k (36.3 against 41.9 tok/s). An agent session lives at depth,
+so it stays 3.
+
+Not tried: `UB` 1536 or 3072, `f16` for the cache (at 131k it costs ~1.3 GB more, three expert
+layers or the ubatch).
 
 ## In an agent session
 

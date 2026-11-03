@@ -234,10 +234,22 @@ for 2.8 GB of experts. Too short to compare, and with the tail skip on not the s
 This repo on the same file and card: 19.0-19.6 tok/s on 256-token turns, exact top-10 routing, at
 131k, 14.3 at 110k of depth.
 
-**As a server for pi** it would need two changes: a request whose prompt plus `max_tokens`
-exceeds the window gets a 400 unless `"fit_max_tokens": true` (pi sends 32 000, so at 8k every
-request fails), and the window itself. It also brings its own chat template, which pi's tool calls
-were not checked against.
+**As a bench server** (`bench/configs/qwen38-flash-strata.env`, `bench/README.md#strata`): Strata
+0.2.9, engine 0.1.55, on its tuned preset "UD-IQ4_XS 128K" (`--tune quick`, 2026-11-02: int8 KV,
+MTP with `--mtp-q4 all`, 35 GiB resident, `--vram-reserve-mib 1024`, `--prefill-head-alias`),
+every approximation off, 131k. Its fit leaves 136 MiB free after a 98.8k fill, the one
+configuration below the 150 MiB margin, at 100 (the author's call): a reserve of 1333 MiB, which
+Strata's start advises, leaves its expert cache no slot and does not start. Strata's first-setup
+config (`install/strata-*.json`, no reserve) does not start at 131k at all. pi's tool calls
+round-trip (`hello` passes). Speed (bench run `t080d`, one repeat):
+
+| tok/s | short | 8k | 32k | 64k | 98.8k |
+| --- | --- | --- | --- | --- | --- |
+| decode | 21.6-29.6 | 22.5 | 24.1 | 22.6 | 22.5 |
+| prefill | - | 119.0 | 112.7 | 102.1 | 91.6 |
+
+Against this repo's llama.cpp on the same file (the table above, a different method): decode
++40-57 % at depth, prefill about the same (~98). VRAM peak 7 757 MiB.
 
 **The precedent that matters**: an RTX PRO 2000 Laptop 8 GB (Windows, Core Ultra 9 285H, 64 GB)
 ran Strata's GSQ IQ3_XXS at 262k with q4_0 KV streamed from RAM and MTP, ~29 tok/s over 2 717
