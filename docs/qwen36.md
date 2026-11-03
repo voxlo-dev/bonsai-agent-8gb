@@ -286,6 +286,16 @@ The same drafts accepted down to the token, and speed within 0.6 %. On Vulkan Qw
 mainline, where the RX 570 numbers above come from; whether Unsloth's tree builds and runs there
 is unmeasured. Logs: `runs/T-038-unsloth-tree/`.
 
+## Strata
+
+Strata ([qwen38-flash.md](qwen38-flash.md#strata-a-dedicated-engine)) runs this model on Unsloth's
+MTP GGUFs, UD-Q4_K_XL among them; its own measurements are +15-20 % decode over llama.cpp on a
+12 GB card with most experts on the CPU, where it fits no slot at 32k. On this card it does not
+load: Strata 0.2.9 (engine 0.1.55) at 131k with int8 KV, `strata launch --tune quick` on the
+UD-Q4_K_XL file, puts 4.40 GiB of non-expert weights on the GPU and runs out of memory in its
+next allocation, before any tuning (2026-11-03, `runs/q36-strata/`). A smaller window or q4_0 KV
+would trade away what llama.cpp holds at 131k with q8_0, so Qwen3.6 stays on llama.cpp.
+
 ## Vision
 
 With `VISION` ([agent.md](agent.md#vision)) this model reads screenshots from its projector,
