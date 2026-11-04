@@ -234,22 +234,29 @@ for 2.8 GB of experts. Too short to compare, and with the tail skip on not the s
 This repo on the same file and card: 19.0-19.6 tok/s on 256-token turns, exact top-10 routing, at
 131k, 14.3 at 110k of depth.
 
-**As a bench server** (`bench/configs/qwen38-flash-strata.env`, `bench/README.md#strata`): Strata
-0.2.9, engine 0.1.55, on its tuned preset "UD-IQ4_XS 128K" (`--tune quick`, 2026-11-02: int8 KV,
-MTP with `--mtp-q4 all`, 35 GiB resident, `--vram-reserve-mib 1024`, `--prefill-head-alias`),
-every approximation off, 131k. Its fit leaves 136 MiB free after a 98.8k fill, the one
-configuration below the 150 MiB margin, at 100 (the author's call): a reserve of 1333 MiB, which
-Strata's start advises, leaves its expert cache no slot and does not start. Strata's first-setup
-config (`install/strata-*.json`, no reserve) does not start at 131k at all. pi's tool calls
-round-trip (`hello` passes). Speed (bench run `t080d`, one repeat):
+**As a bench server** (`bench/configs/qwen38-flash-strata-{dflash2,mtp}.env`,
+`bench/README.md#strata`): Strata 0.2.10, engine 0.1.56, on two presets `strata launch --tune quick`
+wrote on 2026-11-03 (int8 KV, 32k KV resident, 35 GiB resident, 131k), every approximation off. They
+differ in the drafter: `dflash2` runs drafting on auto, which on this card starts DFlash2 alone (no
+MTP layer, windows up to 8 tokens; its server log says so), `mtp` the MTP layer. Both fit with the
+normal margin after a 98.8k fill: 333 and 249 MiB free. pi's tool calls round-trip (`hello`
+passes). Speed (bench run `flash-strata-speed`, one repeat each):
 
-| tok/s | short | 8k | 32k | 64k | 98.8k |
-| --- | --- | --- | --- | --- | --- |
-| decode | 21.6-29.6 | 22.5 | 24.1 | 22.6 | 22.5 |
-| prefill | - | 119.0 | 112.7 | 102.1 | 91.6 |
+| tok/s | short | 8k | 16k | 32k | 64k | 98.8k |
+| --- | --- | --- | --- | --- | --- | --- |
+| decode, DFlash2 | 25.9-26.2 | 26.3 | 26.3 | 27.6 | 26.1 | 24.5 |
+| decode, MTP | 21.6-25.3 | 21.0 | 24.9 | 24.6 | 24.1 | 24.2 |
+| prefill, DFlash2 | - | 577.6 | 732.9 | 727.2 | 682.6 | 627.4 |
+| prefill, MTP | - | 418.7 | 437.0 | 460.3 | 438.1 | 412.4 |
 
+**DFlash2 is the bench's Flash configuration**: decode +5-25 % over MTP up to 64k and equal at
+98.8k, prefill +38-68 %, VRAM peak 7 710 against 7 702 MiB. Strata announces that on a 12 GB card
+MTP was faster in most of its measurements; on this 8 GB card it is not. Against Strata 0.2.9 on
+its MTP preset (run `t080d`: decode 22.5-24.1, prefill 91.6-119.0 at 8k-98.8k) 0.2.10 prefills
+5-7x faster at any depth; that preset (`--prefill-head-alias` with a 1 GiB reserve) does not start
+on 0.2.10, which drops the MTP layer for VRAM and then refuses the alias without it.
 Against this repo's llama.cpp on the same file (the table above, a different method): decode
-+40-57 % at depth, prefill about the same (~98). VRAM peak 7 757 MiB.
++35 % on short turns and +70 % at depth, prefill 6-7x (~98).
 
 **The precedent that matters**: an RTX PRO 2000 Laptop 8 GB (Windows, Core Ultra 9 285H, 64 GB)
 ran Strata's GSQ IQ3_XXS at 262k with q4_0 KV streamed from RAM and MTP, ~29 tok/s over 2 717
