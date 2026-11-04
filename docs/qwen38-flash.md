@@ -237,8 +237,9 @@ This repo on the same file and card: 19.0-19.6 tok/s on 256-token turns, exact t
 **As a bench server** (`bench/configs/qwen38-flash-strata-{dflash2,mtp}.env`,
 `bench/README.md#strata`): Strata 0.2.10, engine 0.1.56, on two presets `strata launch --tune quick`
 wrote on 2026-11-03 (int8 KV, 32k KV resident, 35 GiB resident, 131k), every approximation off. They
-differ in the drafter: `dflash2` runs drafting on auto, which on this card starts DFlash2 alone (no
-MTP layer, windows up to 8 tokens; its server log says so), `mtp` the MTP layer. Both fit with the
+differ in the drafter: `dflash2` DFlash2 alone (no MTP layer, windows up to 8 tokens; set as
+`"drafting": "dflash2"` so a start never falls back to MTP; the speed run below ran it on auto, which
+started the same), `mtp` the MTP layer. Both fit with the
 normal margin after a 98.8k fill: 333 and 249 MiB free. pi's tool calls round-trip (`hello`
 passes). Speed (bench run `flash-strata-speed`, one repeat each):
 
