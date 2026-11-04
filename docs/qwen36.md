@@ -291,10 +291,16 @@ is unmeasured. Logs: `runs/T-038-unsloth-tree/`.
 Strata ([qwen38-flash.md](qwen38-flash.md#strata-a-dedicated-engine)) runs this model on Unsloth's
 MTP GGUFs, UD-Q4_K_XL among them; its own measurements are +15-20 % decode over llama.cpp on a
 12 GB card with most experts on the CPU, where it fits no slot at 32k. On this card it does not
-load: Strata 0.2.9 (engine 0.1.55) at 131k with int8 KV, `strata launch --tune quick` on the
-UD-Q4_K_XL file, puts 4.40 GiB of non-expert weights on the GPU and runs out of memory in its
-next allocation, before any tuning (2026-11-03, `runs/q36-strata/`). A smaller window or q4_0 KV
-would trade away what llama.cpp holds at 131k with q8_0, so Qwen3.6 stays on llama.cpp.
+load at any window: Strata 0.2.10 (engine 0.1.56) runs this model on its own engine,
+`strata-q36`, which keeps everything but the routed experts on the GPU (4.40 GiB of weights,
+1.78 GiB of packed Q8_0 decode copies besides) with the KV in full, and has none of the general
+engine's int8 or streamed KV, host-memory embedding or expert cache that fit Qwen3.8-Flash. With
+the GPU otherwise empty it runs out of memory at 131k, 64k and 32k, and at 8k without MTP;
+`STRATA_Q36_CHUNK=128` gets it to a 32k context with 125 MiB left, where the hybrid experts'
+fixed buffers need 1 143 MiB. `--chunk`, `--expert-vram`, `--no-graph`, `STRATA_Q36_STREAM_ALL`
+and `STRATA_Q36_NO_MMQ` change nothing that matters (2026-11-04, `runs/q36-strata/`). A smaller
+quant shrinks the experts, not these, so Qwen3.6 stays on llama.cpp until the engine has a
+low-VRAM mode.
 
 ## Vision
 
