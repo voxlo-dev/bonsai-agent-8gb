@@ -161,7 +161,7 @@ fake() {  # mode: sets port and fake_pid of a fake server of that mode, in the b
   [[ -s "$work/port" ]] || fail "the fake server did not start"
   port="$(cat "$work/port")"
 }
-trap 'kill "${fake_pid:-}" 2>/dev/null; rm -rf "$work"' EXIT
+trap 'kill "${fake_pid:-}" 2>/dev/null || true; rm -rf "$work"' EXIT
 fake ok
 PORT="$port" "$las" check qwen36-35b >"$work/check.out" 2>&1 || fail "las check failed against a server that calls the tool: $(cat "$work/check.out")"
 kill "${fake_pid:-}"
