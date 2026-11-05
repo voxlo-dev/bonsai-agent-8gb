@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-# Shared helpers for the install steps.
+# Shared helpers for the install steps and `las`.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/config.env"
@@ -34,17 +34,19 @@ model_parts() {
   fi
 }
 
-# --- the models by RAM: preflight reports them, install.sh asks with them ---------------------
+# --- the supported models by RAM: preflight reports them, install.sh asks with them ----------
 # A value from a model file without sourcing it, so all of them can be read next to the one MODEL
 # selected: model_var qwen36-35b MODEL_RAM_MB.
 model_var() { sed -n "s/^$2=//p" "$ROOT/models/$1.env" | tr -d '"'; }
 mem_total_mb() { awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null; }
 # What preflight gates MemTotal on: the RAM the model holds while serving plus ~2 GB for the rest.
 ram_needed_mb() { local r; r="$(model_var "$1" MODEL_RAM_MB)"; ((r > 0)) && echo $((r + 2000)) || echo 0; }
-# The models, the one holding the least RAM first.
+# The supported models (MODEL_SUPPORT), the one holding the least RAM first. A model's default
+# configuration carries its name.
 ramp_models() {
   local f
   for f in "$ROOT"/models/*.env; do
+    [[ "$(model_var "$(basename "$f" .env)" MODEL_SUPPORT)" == supported ]] || continue
     printf '%s %s\n' "$(model_var "$(basename "$f" .env)" MODEL_RAM_MB)" "$(basename "$f" .env)"
   done | sort -n | cut -d' ' -f2
 }
@@ -52,10 +54,10 @@ ramp_models() {
 model_fits() {
   [[ " $(model_var "$1" MODEL_BACKENDS) " == *" $BACKEND "* ]] && (($2 >= $(ram_needed_mb "$1")))
 }
-# The recommendation for MemTotal $1: MODEL_DEFAULT where it fits, else the largest that fits below
+# The recommendation for MemTotal $1: CONFIG_DEFAULT's model where it fits, else the largest that fits below
 # it. Never above it: Qwen3.8-Flash is a choice, not a recommendation.
 recommended_model() {
-  local m rec="" cap; cap="$(model_var "$MODEL_DEFAULT" MODEL_RAM_MB)"
+  local m rec="" cap; cap="$(model_var "$CONFIG_DEFAULT" MODEL_RAM_MB)"
   for m in $(ramp_models); do
     (($(model_var "$m" MODEL_RAM_MB) <= cap)) && model_fits "$m" "$1" && rec="$m"
   done

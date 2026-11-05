@@ -21,8 +21,8 @@ if [[ "${1:-}" == "--print" ]]; then print=true; shift; fi
 cli="$UNSLOTH_CLI"
 [[ -x "$cli" ]] || cli="$(command -v unsloth || true)"
 [[ -n "$cli" ]] || $print || die "Unsloth Studio's unsloth command not found at $UNSLOTH_CLI or on PATH - install Studio (https://github.com/unslothai/unsloth) or set UNSLOTH_CLI"
-[[ -x "$LLAMA_SERVER" ]] || $print || die "llama-server not found at $LLAMA_SERVER - run MODEL=$MODEL ./install.sh build"
-[[ -f "$MODEL_PATH" ]] || $print || die "model not found at $MODEL_PATH - run MODEL=$MODEL ./install.sh model"
+[[ -x "$LLAMA_SERVER" ]] || $print || die "llama-server not found at $LLAMA_SERVER - run CONFIG=$CONFIG ./install.sh build"
+[[ -f "$MODEL_PATH" ]] || $print || die "model not found at $MODEL_PATH - run CONFIG=$CONFIG ./install.sh model"
 
 # Studio drafts on its own when it finds an MTP head; qwen-server's SPEC_TYPE decides instead.
 case "$SPEC_TYPE" in
@@ -37,7 +37,7 @@ top_k="$SAMPLING_TOP_K"
 ((top_k <= 100)) || top_k=100
 
 # Studio's default memory mode, auto, keeps an explicitly requested window and appends the flags
-# below after its own, so the profile's placement wins (--fit off, every layer on the card, the
+# below after its own, so the configuration's placement wins (--fit off, every layer on the card, the
 # experts of CPU_MOE layers in RAM). Its manual mode would strip them and has no option for the
 # expert count. One slot as in qwen-server: Studio's default of 4 splits CTX. The sampling
 # options pin the values over what the UI or a request would send.

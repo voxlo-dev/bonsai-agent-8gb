@@ -9,7 +9,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 case "$BACKEND" in
   cuda)
     has nvidia-smi || die "nvidia-smi not found - install the NVIDIA driver (under WSL2: on the Windows side)"
-    has apt-get || die "no apt-get - install CUDA >= 12.4, a matching gcc, cmake, git, python3 yourself, then: ./install.sh build model pi link"
+    has apt-get || die "no apt-get - install CUDA >= 12.4, a matching gcc, cmake, git, python3 yourself, then: ./install.sh build model link"
     # gcc-13 is the CUDA host compiler: nvcc 12.x rejects the newer distro default gcc
     pkgs=(build-essential cmake ccache git curl python3 gcc-13 g++-13)
     # An nvcc >= 12.4 from anywhere (NVIDIA's repository, a runfile) is used as it is. Otherwise
@@ -27,7 +27,7 @@ case "$BACKEND" in
     ;;
   vulkan)
     ls /dev/dri/renderD* >/dev/null 2>&1 || die "no /dev/dri/renderD* - no GPU render node; install the kernel driver (amdgpu) first"
-    has apt-get || die "no apt-get - install glslc, the Vulkan headers and loader, a Vulkan driver, cmake, git, python3 yourself, then: ./install.sh build model pi link"
+    has apt-get || die "no apt-get - install glslc, the Vulkan headers and loader, a Vulkan driver, cmake, git, python3 yourself, then: ./install.sh build model link"
     # glslc compiles the shaders at build time; mesa-vulkan-drivers is RADV, the driver the
     # numbers were measured with. Keep it >= 25.2, see below.
     pkgs=(build-essential cmake ccache git curl python3 glslc libvulkan-dev mesa-vulkan-drivers vulkan-tools)

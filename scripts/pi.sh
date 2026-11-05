@@ -1,24 +1,29 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
-# Installs the pinned pi into PI_PREFIX and writes its config into PI_AGENT_DIR: provider "local"
+# Installs the pinned pi into $LAS_HOME/pi and writes its config into PI_AGENT_DIR: provider "local"
 # as the default model, the compaction budget, AGENTS.md, the pi-bg-bash extension from npm, and
 # the localagent extension with its workflow.
 # A global pi and ~/.pi stay untouched.
 # Re-run after changing CTX, SERVER_HOST, PORT, MAX_TOKENS, RESERVE_TOKENS, KEEP_RECENT_TOKENS or VISION.
+# Run as `bash scripts/pi.sh`; the harness writers replace it.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+pi_prefix="$LAS_HOME/pi"
+pi_bin="$pi_prefix/node_modules/.bin/pi"
+: "${PI_AGENT_DIR:=$LAS_HOME/pi-agent-$MODEL}"
 
 has npm || die "npm not found - install Node.js >= 22.19 first"
 node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a==22&&b>=19)?0:1)' \
   || die "pi needs Node.js >= 22.19, found $(node --version)"
 
-pkg="$PI_PREFIX/node_modules/@earendil-works/pi-coding-agent/package.json"
+pkg="$pi_prefix/node_modules/@earendil-works/pi-coding-agent/package.json"
 installed="$(node -p "require('$pkg').version" 2>/dev/null || true)"
-if [[ -x "$PI_BIN" && "$installed" == "$PI_VERSION" ]]; then
+if [[ -x "$pi_bin" && "$installed" == "$PI_VERSION" ]]; then
   log "pi $PI_VERSION present"
 else
-  log "installing pi $PI_VERSION into $PI_PREFIX"
-  mkdir -p "$PI_PREFIX"
-  npm install --prefix "$PI_PREFIX" --no-fund --no-audit "@earendil-works/pi-coding-agent@$PI_VERSION"
+  log "installing pi $PI_VERSION into $pi_prefix"
+  mkdir -p "$pi_prefix"
+  npm install --prefix "$pi_prefix" --no-fund --no-audit "@earendil-works/pi-coding-agent@$PI_VERSION"
 fi
 
 dir="$PI_AGENT_DIR"
@@ -27,7 +32,7 @@ log "writing pi config in $dir"
 
 DIR="$dir" SERVER_URL="$SERVER_URL" ALIAS="$MODEL_ALIAS" CTX="$CTX" MAX_TOKENS="$MAX_TOKENS" \
 RESERVE_TOKENS="$RESERVE_TOKENS" KEEP_RECENT_TOKENS="$KEEP_RECENT_TOKENS" \
-VISION="$VISION" AGENT_ID="$AGENT_MODEL_ID" AGENT_BUDGET="$AGENT_BUDGET" AGENT_BUDGET_MSG="$AGENT_BUDGET_MSG" python3 - <<'PY'
+VISION="$VISION" python3 - <<'PY'
 import json, os
 d = os.environ["DIR"]
 
@@ -56,19 +61,6 @@ models.setdefault("providers", {})["local"] = {
             "input": inputs,
             "contextWindow": int(os.environ["CTX"]),
             "maxTokens": int(os.environ["MAX_TOKENS"]),
-        },
-        # The same server, a smaller thinking budget: what the localagent extension starts its
-        # agents on. samplingParams go into the request body as-is; the fork's llama-server reads
-        # reasoning_budget_tokens and reasoning_budget_message per request. See config.env.
-        {
-            "id": os.environ["AGENT_ID"],
-            "input": inputs,
-            "contextWindow": int(os.environ["CTX"]),
-            "maxTokens": int(os.environ["MAX_TOKENS"]),
-            "samplingParams": {
-                "reasoning_budget_tokens": int(os.environ["AGENT_BUDGET"]),
-                "reasoning_budget_message": os.environ["AGENT_BUDGET_MSG"],
-            },
         },
     ],
 }

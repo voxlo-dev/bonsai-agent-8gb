@@ -1,20 +1,16 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
-# Runs the install steps in order, or only the ones named: deps build model pi link
-# Without MODEL, asks once which model to install, from the RAM next to the card, and writes the
-# answer to $QWEN_HOME/model.env, which the qwen-* commands read; not on a terminal it takes the
-# default. scripts/preflight.sh runs next and stops before any step spends time; SKIP_PREFLIGHT=1
-# skips it.
+# Runs the install steps in order, or only the ones named: deps build model link
+# Without CONFIG, asks once which supported model's configuration to install, from the RAM next to
+# the card, and writes the answer to $LAS_HOME/default.env, which config.env reads; not on a
+# terminal it takes the recommendation. scripts/preflight.sh runs next and stops before any step
+# spends time; SKIP_PREFLIGHT=1 skips it.
+had_config="${CONFIG:-}"
 source "$(dirname "${BASH_SOURCE[0]}")/scripts/lib.sh"
 
-# The bonsai-* links of an install from before the rename point at files that are gone.
 link() {
   mkdir -p "$HOME/.local/bin"
   local b
-  for b in bonsai-server bonsai-pi bonsai-studio; do
-    [[ -L "$HOME/.local/bin/$b" && ! -e "$HOME/.local/bin/$b" ]] && rm -f "$HOME/.local/bin/$b" \
-      && log "removed the old link ~/.local/bin/$b"
-  done
   for b in qwen-server qwen-pi qwen-studio kolibri-server kolibri-pi kolibri-studio; do
     ln -sf "$ROOT/bin/$b" "$HOME/.local/bin/$b"
   done
@@ -22,13 +18,14 @@ link() {
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || warn "~/.local/bin is not on PATH"
 }
 
-# The model: MODEL from the environment, else the one model.env records, else asked here. The first
-# answer, or the first MODEL installed, becomes what the qwen-* commands run without MODEL;
-# installing a second model later leaves it. Changing it: edit model.env, or delete it and run
+# The configuration: CONFIG from the environment, else the one default.env records, else asked
+# here. Only a supported model is offered, under its default configuration (the one of its name).
+# The first answer, or the first CONFIG installed, becomes what `las` runs without CONFIG;
+# installing a second one later leaves it. Changing it: edit default.env, or delete it and run
 # ./install.sh again. See README.md#which-model.
-choose_model() {
+choose_config() {
   local total rec answer m n; total="$(mem_total_mb)"; rec="$(recommended_model "${total:-0}")"
-  [[ -n "$rec" ]] || rec="$MODEL_DEFAULT"
+  [[ -n "$rec" ]] || rec="$CONFIG_DEFAULT"
   # The list and the question go to the terminal; only the answer is the function's output.
   { log "which model? Chosen by the RAM next to the 8 GB card: ${total:+$((total / 1024)) GB here}"
     print_ramp "${total:-0}"; } >&2
@@ -36,40 +33,35 @@ choose_model() {
   answer="${answer:-$rec}"
   n=0
   for m in $(ramp_models); do n=$((n + 1)); [[ "$answer" == "$n" ]] && answer="$m"; done
-  [[ -f "$ROOT/models/$answer.env" ]] || die "no model '$answer' - one of: $(ramp_models | tr '\n' ' ')"
+  [[ -f "$ROOT/configs/$answer.env" ]] || die "no configuration '$answer' - one of: $(ramp_models | tr '\n' ' ')"
   echo "$answer"
 }
 steps=("$@")
-((${#steps[@]})) || steps=(deps build model pi link)
+((${#steps[@]})) || steps=(deps build model link)
 for s in "${steps[@]}"; do
-  case "$s" in deps|build|model|pi|link) ;; *) die "unknown step '$s' (deps build model pi link)" ;; esac
+  case "$s" in deps|build|model|link) ;; *) die "unknown step '$s' (deps build model link)" ;; esac
 done
 
-# What the qwen-* commands run without MODEL is recorded once, after preflight passed, so a model
-# this machine cannot hold never sticks: the answer here, else the model from the environment (the
-# first one installed), else the one an install from before the rename ran (Bonsai), else without a
-# terminal the recommendation for this RAM.
-model_file="$QWEN_HOME/model.env"
+# What `las` runs without CONFIG is recorded once, after preflight passed, so a configuration this
+# machine cannot hold never sticks: the CONFIG from the environment (the first one installed), else
+# the answer here, else without a terminal the recommendation for this RAM.
+default_file="$LAS_HOME/default.env"
 record=""
-if [[ ! -f "$model_file" ]]; then
-  case "$MODEL_FROM" in
-    env | legacy) record="$MODEL" ;;
-    default)
-      if [[ -t 0 && -t 1 ]]; then record="$(choose_model)"
-      else record="$(recommended_model "$(mem_total_mb)")"; record="${record:-$MODEL}"
-      fi
-      # config.env has already resolved everything for the default; another model starts over,
-      # with it in the environment, which records it after preflight like any MODEL.
-      [[ "$record" == "$MODEL" ]] || MODEL="$record" exec bash "$ROOT/install.sh" "$@"
-      ;;
-  esac
+if [[ ! -f "$default_file" ]]; then
+  if [[ -n "$had_config" ]]; then record="$CONFIG"
+  elif [[ -t 0 && -t 1 ]]; then record="$(choose_config)"
+  else record="$(recommended_model "$(mem_total_mb)")"; record="${record:-$CONFIG}"
+  fi
+  # config.env has already resolved everything for the default; another configuration starts over,
+  # with it in the environment, which records it after preflight like any CONFIG.
+  [[ "$record" == "$CONFIG" ]] || CONFIG="$record" exec bash "$ROOT/install.sh" "$@"
 fi
-record_model() {
+record_config() {
   [[ -n "$record" ]] || return 0
-  mkdir -p "$QWEN_HOME"
-  printf '# Written by install.sh: the model the qwen-* commands run when MODEL is not set.\nMODEL=%s\n' \
-    "$record" > "$model_file"
-  log "default model: $record, recorded in $model_file (edit it to change)"
+  mkdir -p "$LAS_HOME"
+  printf '# Written by install.sh: the configuration `las` runs when CONFIG is not set.\nCONFIG=%s\n' \
+    "$record" > "$default_file"
+  log "default configuration: $record, recorded in $default_file (edit it to change)"
 }
 
 # Names the step that failed instead of leaving the last command's message alone on the screen.
@@ -87,7 +79,7 @@ on_err() {
 trap on_err ERR
 
 [[ -n "${SKIP_PREFLIGHT:-}" ]] || { current=preflight; bash "$ROOT/scripts/preflight.sh" "${steps[@]}"; echo; }
-record_model
+record_config
 
 for s in "${steps[@]}"; do
   current="$s"
@@ -95,17 +87,12 @@ for s in "${steps[@]}"; do
     deps)  log "step deps: apt toolchain for $BACKEND (asks for sudo)" ;;
     build) log "step build: compiling llama-server, typically 10-30 minutes" ;;
     model) log "step model: ~$((MODEL_DISK_MB / 1024)).$((MODEL_DISK_MB % 1024 * 10 / 1024)) GB, from the Hugging Face cache if it is there" ;;
-    pi)    log "step pi: installing pi $PI_VERSION and writing its config" ;;
     link)  log "step link" ;;
   esac
   case "$s" in
-    deps|build|model|pi) bash "$ROOT/scripts/$s.sh" ;;
+    deps|build|model) bash "$ROOT/scripts/$s.sh" ;;
     link) link ;;
   esac
 done
 current=""
-run=qwen-pi
-if [[ "$MODEL" == kolibri1 ]]; then run=kolibri-pi
-elif [[ "$(sed -n 's/^MODEL=//p' "$model_file" 2>/dev/null)" != "$MODEL" ]]; then run="MODEL=$MODEL qwen-pi"
-fi
-log "done - start the agent in a project directory with: $run (it starts qwen-server itself)"
+log "done - start the server with: qwen-server (configuration $CONFIG)"

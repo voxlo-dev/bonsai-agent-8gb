@@ -10,6 +10,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 source "$ROOT/config.env"
 
+pi_bin="$LAS_HOME/pi/node_modules/.bin/pi"
+: "${PI_AGENT_DIR:=$LAS_HOME/pi-agent-$MODEL}"
+: "${SERVER_AUTOSTART:=true}"
+
 say() { printf '\033[1;36m==>\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
 
@@ -27,7 +31,7 @@ die_with_log() {
   exit 1
 }
 
-[[ -x "$PI_BIN" ]] || die "pi not found at $PI_BIN - run ./install.sh pi"
+[[ -x "$pi_bin" ]] || die "pi not found at $pi_bin - run bash scripts/pi.sh"
 
 url="$SERVER_URL"
 healthy() { curl -sf -o /dev/null --max-time 2 "$url/health"; }
@@ -49,7 +53,7 @@ esac
 
 # Sessions register under run/, guarded by a lock, so a second qwen-pi shares the server and
 # only the last one to leave stops it. server.pid exists only for a server qwen-pi started.
-run="$QWEN_HOME/run"
+run="$LAS_HOME/run"
 mkdir -p "$run/sessions"
 exec 9>"$run/lock"
 
@@ -120,7 +124,5 @@ fi
 # caught, bash resets it for pi, which still gets it as usual.
 trap : INT
 status=0
-# The extensions read their limits from the environment, so config.env stays the source.
-export LOCALAGENT_MAX_TURNS="$AGENT_MAX_TURNS" LOCALAGENT_AGENT_MODEL="local/$AGENT_MODEL_ID"
-PI_CODING_AGENT_DIR="$PI_AGENT_DIR" "$PI_BIN" --no-skills "$@" 9>&- || status=$?
+PI_CODING_AGENT_DIR="$PI_AGENT_DIR" "$pi_bin" --no-skills "$@" 9>&- || status=$?
 exit "$status"

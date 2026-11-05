@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-# The llama-server flags of the model and profile config.env selected, for the two launchers that
+# The llama-server flags of the configuration config.env selected, for the two launchers that
 # start one: bin/qwen-server directly, bin/qwen-studio through Unsloth Studio. Sourced after
 # config.env. Exports the environment the server needs, and sets LOAD_FLAGS (placement, cache,
 # reasoning, the model file's SERVER_ARGS) and the sampling defaults. The model path, the window,
@@ -22,7 +22,7 @@ fi
 # options of its own (-p is its port), so only long ones pass through it intact.
 LOAD_FLAGS=(--n-gpu-layers 99 --fit off --flash-attn on)
 # A MoE model keeps the experts of CPU_MOE layers in RAM, and reads prompts at ~250 tok/s with
-# the default ubatch of 512 against ~1 050 at 4096. Both set by its profile. See docs/qwen36.md.
+# the default ubatch of 512 against ~1 050 at 4096. Both set by its configuration. See docs/qwen36.md.
 if [[ -n "$CPU_MOE" ]]; then LOAD_FLAGS+=(--n-cpu-moe "$CPU_MOE"); fi
 if [[ -n "$UB" ]]; then LOAD_FLAGS+=(--batch-size "$UB" --ubatch-size "$UB"); fi
 LOAD_FLAGS+=(--cache-type-k "$KV_K" --cache-type-v "$KV_V" --no-context-shift --jinja --reasoning on)
@@ -33,7 +33,7 @@ if [[ "$PRESERVE_THINKING" == "true" ]]; then
 else
   LOAD_FLAGS+=(--no-reasoning-preserve)
 fi
-# Vision: the projector stays on the CPU, so the profile's VRAM is untouched; the cap bounds the
+# Vision: the projector stays on the CPU, so the configuration's VRAM is untouched; the cap bounds the
 # encode time and what an image takes of the window. See docs/agent.md#vision.
 if [[ "$VISION" == 1 ]]; then
   LOAD_FLAGS+=(--mmproj "$MMPROJ_PATH" --no-mmproj-offload --image-max-tokens "$IMAGE_MAX_TOKENS")

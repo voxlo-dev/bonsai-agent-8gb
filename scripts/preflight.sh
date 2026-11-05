@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Checks everything that would make a later step fail, before any of them spends half an hour:
-# disk, RAM and which model it allows, the GPU driver for BACKEND, VRAM, the distro and Node. Reports every item, then
+# disk, RAM and which supported model it allows, the GPU driver for BACKEND, VRAM and the distro. Reports every item, then
 # exits once. install.sh runs it first; SKIP_PREFLIGHT=1 turns it off. Takes the step list as
 # arguments so it only checks what is about to run.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 steps=("$@")
-((${#steps[@]})) || steps=(deps build model pi link)
+((${#steps[@]})) || steps=(deps build model link)
 runs() { local s; for s in "${steps[@]}"; do [[ "$s" == "$1" ]] && return 0; done; return 1; }
 
 fails=0 warns=0
@@ -19,7 +19,7 @@ hard() { printf '   \033[1;31mfail\033[0m  %s\n' "$*"; fails=$((fails + 1)); }
 nearest() { local d="$1"; while [[ ! -d "$d" && "$d" != / ]]; do d="$(dirname "$d")"; done; printf '%s' "$d"; }
 free_mb() { df -P -BM "$(nearest "$1")" 2>/dev/null | awk 'NR == 2 { sub(/M$/, "", $4); print $4 }'; }
 
-log "preflight ($MODEL on $BACKEND, steps: ${steps[*]})"
+log "preflight ($CONFIG: $MODEL on $BACKEND, steps: ${steps[*]})"
 
 # --- system -----------------------------------------------------------------
 if [[ "$(uname -s)" != Linux ]]; then
@@ -67,15 +67,14 @@ if runs model; then
     need_home=$((need_home + MMPROJ_DISK_MB))
   fi
 fi
-runs pi    && need_home=$((need_home + 500))
 if ((need_home > 0)); then
-  have="$(free_mb "$QWEN_HOME")"
+  have="$(free_mb "$LAS_HOME")"
   if [[ -z "$have" ]]; then
-    soft "disk: cannot read free space for $QWEN_HOME"
+    soft "disk: cannot read free space for $LAS_HOME"
   elif ((have < need_home)); then
-    hard "disk: $((have / 1024)) GB free at $QWEN_HOME, needs ~$((need_home / 1024)) GB"
+    hard "disk: $((have / 1024)) GB free at $LAS_HOME, needs ~$((need_home / 1024)) GB"
   else
-    pass "disk: $((have / 1024)) GB free at $QWEN_HOME, needs ~$((need_home / 1024)) GB"
+    pass "disk: $((have / 1024)) GB free at $LAS_HOME, needs ~$((need_home / 1024)) GB"
   fi
 fi
 if runs deps && [[ "$BACKEND" == cuda ]] && ! has nvcc; then
@@ -123,7 +122,7 @@ elif ((avail_mb < 7500)); then
 else
   pass "RAM: ${avail_mb} MB available"
 fi
-# The ramp: which of the models this machine's RAM allows, and the one to take (README.md#which-model).
+# The ramp: which of the supported models this machine's RAM allows, and the one to take (README.md#which-model).
 if [[ -n "$total_mb" ]]; then
   fits=""; for m in $(ramp_models); do model_fits "$m" "$total_mb" && fits+="${fits:+, }$m"; done
   rec="$(recommended_model "$total_mb")"
@@ -131,7 +130,7 @@ if [[ -n "$total_mb" ]]; then
 fi
 
 # --- GPU --------------------------------------------------------------------
-# Only 'deps' and 'build' need the driver here; 'model', 'pi' and 'link' work on a machine with
+# Only 'deps' and 'build' need the driver here; 'model' and 'link' work on a machine with
 # no GPU at all, which is how a server on another host gets set up.
 vram_total=0 vram_used=0
 if ! runs deps && ! runs build; then
@@ -206,40 +205,20 @@ if ((vram_total > 0)); then
   else
     pass "VRAM: ${vram_total} MiB total"
   fi
-  # A desktop on this GPU takes 0.5-1.2 GB, which is exactly the headroom the 64k profile does
+  # A desktop on this GPU takes 0.5-1.2 GB, which is exactly the headroom the 64k configuration does
   # not have. See docs/bonsai.md#vram-budget.
-  if ((vram_used > 400)) && [[ "$PROFILE" == dedicated ]]; then
-    soft "VRAM: ${vram_used} MiB already in use - something (a desktop?) is on this GPU; the 'dedicated' profile fills the card to within a few hundred MiB. Use PROFILE=display, or move the display to an iGPU"
+  if ((vram_used > 400)) && [[ "$CONFIG" != *-display ]]; then
+    soft "VRAM: ${vram_used} MiB already in use - something (a desktop?) is on this GPU; $CONFIG fills the card to within a few hundred MiB. Use its -display configuration if there is one, or move the display to an iGPU"
   fi
 elif [[ "$BACKEND" == vulkan ]]; then
   soft "VRAM: cannot read it from sysfs - check by hand that the card has 8 GB"
 fi
 fi
 
-# --- Node -------------------------------------------------------------------
-if runs pi; then
-  # Ubuntu 24.04 ships 18, Debian 13 20: nvm is the usual source, and it only reaches the PATH of a
-  # shell that read ~/.bashrc.
-  nvm_node="$(ls -d "${NVM_DIR:-$HOME/.nvm}"/versions/node/v* 2>/dev/null | sort -V | tail -1 || true)"
-  nvm_hint=" - install one with nvm or NodeSource, see docs/setup.md#toolchain"
-  [[ -n "$nvm_node" ]] && version_ge "${nvm_node##*/v}" 22.19 \
-    && nvm_hint=" - nvm has ${nvm_node##*/}, but not on this shell's PATH: run from a shell that loads nvm (source ~/.nvm/nvm.sh)"
-  if ! has node; then
-    hard "node: not found - pi needs Node.js >= 22.19$nvm_hint"
-  else
-    nver="$(node --version 2>/dev/null | tr -d v)"
-    if [[ -n "$nver" ]] && ! version_ge "$nver" 22.19; then
-      hard "node: v$nver is older than the required 22.19$nvm_hint"
-    else
-      pass "node: v${nver:-?}"
-    fi
-  fi
-fi
-
 # --- port -------------------------------------------------------------------
 if [[ "$SERVER_HOST" == 127.0.0.1 || "$SERVER_HOST" == localhost ]]; then
   if curl -sf --max-time 2 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
-    soft "port $PORT: something already answers there - if it is not qwen-server, set PORT and re-run ./install.sh pi"
+    soft "port $PORT: something already answers there - if it is not a server of yours, set PORT"
   fi
 fi
 
