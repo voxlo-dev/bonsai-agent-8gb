@@ -6,6 +6,8 @@
 #                                            ARGS go to the engine and win over the defaults;
 #                                            --print shows the command instead of running it
 #   las list                                 every configuration: model, engine, window, support
+#   las check CONFIG [-- ARGS]              the tool-call round-trip against the running server of
+#                                            CONFIG (scripts/check_tools.py): exits 1 naming the step
 #   las harness pi|opencode CONFIG [--dir DIR]
 #                                            writes that harness's config for CONFIG (harness/*.py)
 #                                            into DIR, default $LAS_HOME/harness/HARNESS/CONFIG;
@@ -21,6 +23,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: las serve [--print] [CONFIG] [-- ARGS]
        las list
+       las check CONFIG [-- ARGS]
        las harness pi|opencode CONFIG [--dir DIR]
 EOF
   exit 1
@@ -49,6 +52,14 @@ case "$cmd" in
     if [[ -n "$name" ]]; then export CONFIG="$name"; unset CONFIG_FILE; fi
     ;;
   list) ;;
+  check)
+    name="${1:-}"
+    [[ -n "$name" && "$name" != -* ]] || usage
+    shift
+    [[ $# -eq 0 || "$1" == -- ]] || usage
+    shift || true
+    export CONFIG="$name"; unset CONFIG_FILE
+    ;;
   harness)
     harness="${1:-}"; name="${2:-}"; dir=""
     case "$harness" in pi | opencode) ;; *) usage ;; esac
@@ -184,8 +195,14 @@ write_harness() {
   esac
 }
 
+# The round-trip against the server CONFIG names; it must already run (las serve CONFIG).
+check_tools() {
+  SERVER_URL="$SERVER_URL" MODEL_ALIAS="$MODEL_ALIAS" exec python3 "$ROOT/scripts/check_tools.py" "$@"
+}
+
 case "$cmd" in
   list) list_configs ;;
+  check) check_tools "$@" ;;
   harness) write_harness ;;
   serve)
     case "$ENGINE" in

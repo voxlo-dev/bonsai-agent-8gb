@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Smoke test of the launcher and the configurations behind it, in the Claude sandbox (no GPU, no
-# server started): `las list` names every configs/*.env; `las serve --print` shows the engine
+# server started, bar a fake one): `las list` names every configs/*.env; `las serve --print` shows the engine
 # command of each engine with the configuration's window - llama-server, Strata on a prepared run
 # config, Unsloth Studio - and starts nothing; the settings precedence holds (environment over
 # configuration over model file over defaults, and the recorded default configuration over the
 # built-in one); `las harness pi|opencode` write their configs with the configuration's window and
-# URL; an unknown configuration is refused. Writes only to a temp dir.
+# URL; `las check` passes against a fake OpenAI-compatible server and names the failing step when it
+# answers no tool call; an unknown configuration is refused. Writes only to a temp dir.
 source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib.sh"
 
 work="$(mktemp -d)"
@@ -124,6 +125,52 @@ else
 fi
 "$las" harness bogus $sc >/dev/null 2>&1 && fail "an unknown harness was accepted"
 "$las" harness pi no-such-config --dir "$work/x" >/dev/null 2>&1 && fail "harness pi accepted an unknown configuration"
+
+# las check: the tool-call round-trip against a fake server (a free localhost port, the mode of
+# its first argument: ok answers a tool call, then a final answer; notools never calls the tool).
+cat > "$work/fake.py" <<'PY'
+import http.server, json, sys
+
+mode = sys.argv[2]
+
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_POST(self):
+        req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        assert req["tools"] and req["tools"][0]["function"]["name"] == "get_weather"
+        if req["messages"][-1]["role"] == "tool":
+            msg = {"role": "assistant", "content": "It is 18 degrees and cloudy in Paris."}
+        elif mode == "ok":
+            msg = {"role": "assistant", "content": None, "tool_calls": [{"id": "c1", "type": "function",
+                   "function": {"name": "get_weather", "arguments": json.dumps({"city": "Paris"})}}]}
+        else:
+            msg = {"role": "assistant", "content": "I cannot check the weather."}
+        out = json.dumps({"choices": [{"index": 0, "message": msg, "finish_reason": "stop"}]}).encode()
+        self.send_response(200); self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out))); self.end_headers(); self.wfile.write(out)
+
+srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+open(sys.argv[1], "w").write(str(srv.server_port))
+srv.serve_forever()
+PY
+fake() {  # mode: sets port and fake_pid of a fake server of that mode, in the background
+  rm -f "$work/port"
+  python3 -I "$work/fake.py" "$work/port" "$1" >/dev/null 2>&1 &
+  fake_pid=$!
+  for _ in $(seq 50); do [[ -s "$work/port" ]] && break; sleep 0.1; done
+  [[ -s "$work/port" ]] || fail "the fake server did not start"
+  port="$(cat "$work/port")"
+}
+trap 'kill "${fake_pid:-}" 2>/dev/null; rm -rf "$work"' EXIT
+fake ok
+PORT="$port" "$las" check qwen36-35b >"$work/check.out" 2>&1 || fail "las check failed against a server that calls the tool: $(cat "$work/check.out")"
+kill "${fake_pid:-}"
+fake notools
+PORT="$port" "$las" check qwen36-35b >"$work/check.out" 2>&1 && fail "las check passed against a server that never calls the tool"
+grep -q "step 'tool_calls'" "$work/check.out" || fail "las check did not name the failing step: $(cat "$work/check.out")"
+kill "${fake_pid:-}"
+PORT="$port" "$las" check qwen36-35b >/dev/null 2>&1 && fail "las check passed against a dead server"
+"$las" check >/dev/null 2>&1 && fail "las check without a configuration was accepted"
 
 # The recorded default configuration is what `las` runs without a name; a name wins over it.
 mkdir -p "$LAS_HOME"
