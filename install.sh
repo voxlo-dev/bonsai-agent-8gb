@@ -47,18 +47,20 @@ for s in "${steps[@]}"; do
 done
 
 # What `las` runs without CONFIG is recorded once, after preflight passed, so a configuration this
-# machine cannot hold never sticks: the CONFIG from the environment (the first one installed), else
-# the answer here, else without a terminal the recommendation for this RAM.
+# machine cannot hold never sticks: the CONFIG from the environment (the first one installed) when
+# its model is supported, else the answer here, else without a terminal the recommendation for this
+# RAM. An unsupported configuration installs without becoming the default.
 default_file="$LAS_HOME/default.env"
 record=""
 if [[ ! -f "$default_file" ]]; then
-  if [[ -n "$had_config" ]]; then record="$CONFIG"
+  if [[ -n "$had_config" ]]; then
+    if [[ "$MODEL_SUPPORT" == supported ]]; then record="$CONFIG"; fi
   elif [[ -t 0 && -t 1 ]]; then record="$(choose_config)"
   else record="$(recommended_model "$(mem_total_mb)")"; record="${record:-$CONFIG}"
   fi
   # config.env has already resolved everything for the default; another configuration starts over,
   # with it in the environment, which records it after preflight like any CONFIG.
-  [[ "$record" == "$CONFIG" ]] || CONFIG="$record" exec bash "$ROOT/install.sh" "$@"
+  [[ -z "$record" || "$record" == "$CONFIG" ]] || CONFIG="$record" exec bash "$ROOT/install.sh" "$@"
 fi
 record_config() {
   [[ -n "$record" ]] || return 0

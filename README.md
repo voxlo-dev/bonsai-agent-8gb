@@ -36,7 +36,7 @@ same task: [the agent sessions](docs/agent-sessions.md).
 
 A model of another architecture gets its own llama.cpp tree, its chat template and a checked
 tool-call round-trip, with no installer entry; LFM2.5-24B is the first candidate (hoped to replace
-Bonsai), its model file waiting for its GGUF. The path is in the
+Bonsai): `configs/lfm25-24b.env`, unsupported until benched ([docs/lfm25.md](docs/lfm25.md)). The path is in the
 [`bench-add-model` skill](.agents/skills/bench-add-model/SKILL.md) and [docs/dev.md](docs/dev.md).
 
 ## Install
