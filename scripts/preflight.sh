@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Checks everything that would make a later step fail, before any of them spends half an hour:
-# disk, RAM and which supported model it allows, the GPU driver for BACKEND, VRAM and the distro. Reports every item, then
-# exits once. install.sh runs it first; SKIP_PREFLIGHT=1 turns it off. Takes the step list as
+# disk, RAM and which configurations of the ramp it allows, Strata for a Strata configuration, the
+# GPU driver for BACKEND, VRAM and the distro. Reports every item, then exits once. install.sh runs it first; SKIP_PREFLIGHT=1 turns it off. Takes the step list as
 # arguments so it only checks what is about to run.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 steps=("$@")
 ((${#steps[@]})) || steps=(deps build model link)
+# install.sh runs only link for a Strata configuration (Strata brings its engine and files).
+if [[ "$ENGINE" == strata ]]; then s=(); for x in "${steps[@]}"; do [[ "$x" == link ]] && s+=(link); done; steps=("${s[@]}"); fi
 runs() { local s; for s in "${steps[@]}"; do [[ "$s" == "$1" ]] && return 0; done; return 1; }
 
 fails=0 warns=0
@@ -48,6 +50,17 @@ case " $MODEL_BACKENDS " in
   *" $BACKEND "*) ;;
   *) hard "model: MODEL=$MODEL is measured on ${MODEL_BACKENDS// /, } only, not $BACKEND - see $MODEL_DOC" ;;
 esac
+# Strata is the user's install, and its run config the preset `strata launch` wrote (README.md#strata).
+if [[ "$ENGINE" == strata ]]; then
+  why="$(strata_missing)"
+  if [[ -n "$why" ]]; then
+    hard "engine: $why - install it yourself (README.md#strata), or take a configuration without it: qwen38-flash runs Flash on llama.cpp"
+  elif [[ ! -f "$STRATA_CONFIG" ]]; then
+    hard "engine: no Strata run config at $STRATA_CONFIG - run strata launch and pick the preset configs/$CONFIG.env names"
+  else
+    pass "engine: Strata $STRATA_VERSION, run config $(basename "$STRATA_CONFIG")"
+  fi
+fi
 
 # --- disk -------------------------------------------------------------------
 need_home=0
@@ -95,7 +108,7 @@ elif ((MODEL_RAM_MB > 0)); then
   # A MoE keeps its experts in RAM for as long as it serves, so the ceiling is MemTotal: under
   # WSL2 that is half the Windows RAM unless .wslconfig says otherwise. See docs/qwen36.md.
   # The vision projector sits in RAM next to them (docs/agent.md#vision).
-  need_ram="$(ram_needed_mb "$MODEL")"
+  need_ram=$((MODEL_RAM_MB + 2000))
   if [[ "$VISION" == 1 ]]; then
     MODEL_RAM_MB=$((MODEL_RAM_MB + MMPROJ_RAM_MB)) need_ram=$((need_ram + MMPROJ_RAM_MB))
     ((MODEL_RAM_FULL_MB > 0)) && MODEL_RAM_FULL_MB=$((MODEL_RAM_FULL_MB + MMPROJ_RAM_MB))
@@ -122,11 +135,11 @@ elif ((avail_mb < 7500)); then
 else
   pass "RAM: ${avail_mb} MB available"
 fi
-# The ramp: which of the supported models this machine's RAM allows, and the one to take (README.md#which-model).
+# The ramp: which of its configurations this machine's RAM allows, and the one to take (README.md#which-model).
 if [[ -n "$total_mb" ]]; then
-  fits=""; for m in $(ramp_models); do model_fits "$m" "$total_mb" && fits+="${fits:+, }$m"; done
-  rec="$(recommended_model "$total_mb")"
-  pass "models: $((total_mb / 1024)) GB of RAM runs ${fits:-none}${rec:+; recommended here: $rec}; this run: $MODEL"
+  fits=""; for c in $(ramp_configs); do config_fits "$c" "$total_mb" && fits+="${fits:+, }$c"; done
+  rec="$(recommended_config "$total_mb")"
+  pass "configurations: $((total_mb / 1024)) GB of RAM runs ${fits:-none}${rec:+; recommended here: $rec}; this run: $CONFIG"
 fi
 
 # --- GPU --------------------------------------------------------------------

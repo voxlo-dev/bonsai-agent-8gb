@@ -34,48 +34,60 @@ model_parts() {
   fi
 }
 
-# --- the supported models by RAM: preflight reports them, install.sh asks with them ----------
-# A value from a model file without sourcing it, so all of them can be read next to the one MODEL
-# selected: model_var qwen36-35b MODEL_RAM_MB.
-model_var() { sed -n "s/^$2=//p; s/^: \"\${$2:=\(.*\)}\"$/\1/p" "$ROOT/models/$1.env" | tr -d '"'; }
+# --- the ramp: the configurations by RAM, preflight reports them, install.sh asks with them -----
+# A value from a file without sourcing it, so all of them can be read next to the one CONFIG
+# selected: model_var qwen36-35b MODEL_RAM_MB from models/, config_var from configs/, falling back
+# to its model's file.
+env_var() { sed -n "s/^$2=//p; s/^: \"\${$2:=\(.*\)}\"$/\1/p" "$1" | tr -d '"'; }
+model_var() { env_var "$ROOT/models/$1.env" "$2"; }
+config_var() {
+  local v; v="$(env_var "$ROOT/configs/$1.env" "$2")"
+  [[ -n "$v" ]] || v="$(model_var "$(env_var "$ROOT/configs/$1.env" MODEL)" "$2")"
+  echo "$v"
+}
 mem_total_mb() { awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null; }
-# What preflight gates MemTotal on: the RAM the model holds while serving plus ~2 GB for the rest.
-ram_needed_mb() { local r; r="$(model_var "$1" MODEL_RAM_MB)"; ((r > 0)) && echo $((r + 2000)) || echo 0; }
-# The supported models (MODEL_SUPPORT), the one holding the least RAM first. A model's default
-# configuration carries its name.
-ramp_models() {
-  local f
-  for f in "$ROOT"/models/*.env; do
-    [[ "$(model_var "$(basename "$f" .env)" MODEL_SUPPORT)" == supported ]] || continue
-    printf '%s %s\n' "$(model_var "$(basename "$f" .env)" MODEL_RAM_MB)" "$(basename "$f" .env)"
-  done | sort -n | cut -d' ' -f2
+# What preflight gates MemTotal on: the RAM a configuration holds while serving plus ~2 GB for the rest.
+ram_needed_mb() { local r; r="$(config_var "$1" MODEL_RAM_MB)"; ((r > 0)) && echo $((r + 2000)) || echo 0; }
+# RAMP then RAMP_ALSO (config.env), the configurations of a supported model only.
+ramp_configs() {
+  local c
+  for c in $RAMP $RAMP_ALSO; do
+    [[ "$(config_var "$c" MODEL_SUPPORT)" == supported ]] && echo "$c"
+  done
 }
 # Runs here: enough RAM in total, and measured on BACKEND.
-model_fits() {
-  [[ " $(model_var "$1" MODEL_BACKENDS) " == *" $BACKEND "* ]] && (($2 >= $(ram_needed_mb "$1")))
+config_fits() {
+  [[ " $(config_var "$1" MODEL_BACKENDS) " == *" $BACKEND "* ]] && (($2 >= $(ram_needed_mb "$1")))
 }
-# The recommendation for MemTotal $1: CONFIG_DEFAULT's model where it fits, else the largest that fits below
-# it. Never above it: Qwen3.8-Flash is a choice, not a recommendation.
-recommended_model() {
-  local m rec="" cap; cap="$(model_var "$CONFIG_DEFAULT" MODEL_RAM_MB)"
-  for m in $(ramp_models); do
-    (($(model_var "$m" MODEL_RAM_MB) <= cap)) && model_fits "$m" "$1" && rec="$m"
+# The recommendation for MemTotal $1: the last of RAMP that fits. RAMP_ALSO is a choice, never one.
+recommended_config() {
+  local c rec=""
+  for c in $(ramp_configs); do
+    [[ " $RAMP " == *" $c "* ]] && config_fits "$c" "$1" && rec="$c"
   done
   echo "$rec"
 }
-# One line per model for MemTotal $1, numbered: what it holds in RAM, its role, whether it runs here.
+# Strata is the user's install (README.md#strata): empty when STRATA_VERSION is there, else why not.
+strata_missing() {
+  local v; v="$("$STRATA_BIN" --version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -1 || true)"
+  if [[ -z "$v" ]]; then echo "Strata is not installed"
+  elif [[ "$v" != "$STRATA_VERSION" ]]; then echo "Strata $v is installed, this needs $STRATA_VERSION"
+  fi
+}
+# One line per configuration for MemTotal $1, numbered: what it holds in RAM, its role, whether it runs here.
 print_ramp() {
-  local m i=0 ram need full rec note; rec="$(recommended_model "$1")"
-  for m in $(ramp_models); do
-    i=$((i + 1)) ram="$(model_var "$m" MODEL_RAM_MB)" need="$(ram_needed_mb "$m")"
-    full="$(model_var "$m" MODEL_RAM_FULL_MB)"
-    if [[ " $(model_var "$m" MODEL_BACKENDS) " != *" $BACKEND "* ]]; then note="not measured on $BACKEND"
+  local c i=0 ram need full rec note strata; rec="$(recommended_config "$1")" strata="$(strata_missing)"
+  for c in $(ramp_configs); do
+    i=$((i + 1)) ram="$(config_var "$c" MODEL_RAM_MB)" need="$(ram_needed_mb "$c")"
+    full="$(config_var "$c" MODEL_RAM_FULL_MB)"
+    if [[ " $(config_var "$c" MODEL_BACKENDS) " != *" $BACKEND "* ]]; then note="not measured on $BACKEND"
     elif (($1 < need)); then note="needs ~$((need / 1024)) GB of RAM in total"
-    elif [[ "$m" == "$rec" ]]; then note="runs here - recommended"
+    elif [[ "$(config_var "$c" ENGINE)" == strata && -n "$strata" ]]; then note="needs Strata $STRATA_VERSION, yours to install"
+    elif [[ "$c" == "$rec" ]]; then note="runs here - recommended"
     elif ((full > 0 && $1 < full)); then note="runs here, slower: full speed from ~$((full / 1024)) GB free"
     else note="runs here"
     fi
-    printf '   %d) %-13s %-24s %4s GB RAM  %-36s %s\n' "$i" "$m" "$(model_var "$m" MODEL_TITLE)" \
-      "+$(((ram + 1023) / 1024))" "$(model_var "$m" MODEL_ROLE)" "$note"
+    printf '   %d) %-30s %-32s %4s GB RAM  %-40s %s\n' "$i" "$c" "$(config_var "$c" MODEL_TITLE)" \
+      "+$(((ram + 1023) / 1024))" "$(config_var "$c" MODEL_ROLE)" "$note"
   done
 }

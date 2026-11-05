@@ -1,8 +1,7 @@
 # LFM2.5-24B-A2B
 
-**Unsupported until benched:** a candidate, not offered by `install.sh`. Its campaign row
-([`backlog/bench-campaign.md`](../backlog/bench-campaign.md)) tunes it (`bench-optimize` stage 2),
-then benches it; the hope is that it replaces Bonsai.
+**Supported, the ramp's 16 GB step** ([README](../README.md#which-model)): tuned by `bench-optimize`
+to stage 2 and benched in tier 1 ([bench.md](bench.md#lfm25-24b-in-tier-1)), replacing Bonsai.
 
 Liquid AI's reasoning MoE: architecture `lfm2moe`, 40 layers of which 10 attention and the rest
 short convolutions, layers 0-1 dense, 64 experts with 4 active (2B parameters per token), a 131k

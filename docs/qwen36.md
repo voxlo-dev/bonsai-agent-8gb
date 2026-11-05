@@ -26,7 +26,7 @@ tokens at `q8_0`/`q8_0`, against Bonsai's 34.
 
 | Pin | Value |
 | --- | --- |
-| Model | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF` rev `5bc3e238d916f48a861bac2f8a1990a0e9b7e98d`, `Qwen3.6-35B-A3B-UD-Q4_K_M.gguf`, 22 663 387 424 bytes |
+| Model | `unsloth/Qwen3.6-35B-A3B-MTP-GGUF` rev `5bc3e238d916f48a861bac2f8a1990a0e9b7e98d`, `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (the `-display` and `-vulkan` configurations: `UD-Q4_K_M`, 22 663 387 424 bytes, as measured) |
 | sha256 | `0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b` |
 | llama.cpp, CUDA | Unsloth's b11681-mix, source `57bf43afe8a9981e33fcfc11a755bcee2b775d2d` from its release tarball, in `$LAS_HOME/llama.cpp-unsloth`, shared with Qwen3.8-Flash ([why](#one-tree-for-both-qwen-models)); measured below on b11160 |
 | llama.cpp, Vulkan | mainline, ggml-org `8212c7802455255460ab8e18fc34754560031b34` (2026-09-24), in `$LAS_HOME/llama.cpp-mainline`; everything below was measured on it |

@@ -239,17 +239,20 @@ on `PORT`. Three properties matter:
 `SKIP_PREFLIGHT=1` bypasses it. The failure message says so, because the checks encode what was
 true on three machines and should not be the thing that stops a fourth.
 
-It also says which models the machine's RAM runs and which one it recommends: `MemTotal` against
-each model file's `MODEL_RAM_MB` plus ~2 GB, the same gate the selected model is held to, and
-Qwen3.6 as the recommendation wherever it fits (Qwen3.8-Flash is never recommended, only chosen).
-Only models with `MODEL_SUPPORT=supported` are listed; an unsupported one still installs when its
-configuration is named (`CONFIG=bonsai ./install.sh`).
+It also says which configurations of the ramp the machine's RAM runs and which one it recommends:
+`MemTotal` against each one's `MODEL_RAM_MB` plus ~2 GB, the same gate the selected configuration is
+held to. The ramp is `RAMP` and `RAMP_ALSO` in `config.env`: the recommendation is the largest of
+`RAMP` that fits, `RAMP_ALSO` is offered beside it and never recommended, and a configuration of a
+model without `MODEL_SUPPORT=supported` is left out; it still installs when named
+(`CONFIG=bonsai ./install.sh`). A Strata configuration fails here until the user has installed
+`STRATA_VERSION` and run the `strata launch` preset its `STRATA_CONFIG` names; `install.sh` then
+runs only `link` for it.
 Before preflight, a first `./install.sh` without `CONFIG` shows the same list as a numbered question;
 without a terminal it takes the recommendation. The answer is recorded in `$LAS_HOME/default.env`
-only once preflight has passed, so a model the machine cannot hold never sticks
-([README](../README.md#install-in-detail)). Both
-read the model files with `model_var` in `scripts/lib.sh`, so a new supported model file joins the
-list by its `MODEL_RAM_MB`, `MODEL_TITLE` and `MODEL_ROLE`.
+only once preflight has passed, so a configuration the machine cannot hold never sticks
+([README](../README.md#install-in-detail)). Both read the files with `config_var` in
+`scripts/lib.sh`, a configuration's value first, then its model file's: `MODEL_RAM_MB`,
+`MODEL_TITLE` and `MODEL_ROLE`.
 
 VRAM in use above 400 MiB is a warning rather than a failure: it usually means a desktop is on the
 card, which is what the `-display` configurations are for, but it can equally be another model server that will
