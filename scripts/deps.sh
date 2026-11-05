@@ -55,7 +55,7 @@ case "$BACKEND" in
     driver="$(sed -n 's/^[[:space:]]*driverVersion *= *//p' <<<"$summary" | head -1)"
     [[ -n "$device" ]] || die "vulkaninfo lists no device - the Vulkan driver does not see the GPU"
     log "Vulkan device: $device, driver $driver"
-    # RADV_PERFTEST=nogttspill, which qwen-server sets, is silently ignored below Mesa 25.2
+    # RADV_PERFTEST=nogttspill, which las serve sets, is silently ignored below Mesa 25.2
     # and is worth 1.22x on this model. Debian 13 ships 25.0.7; trixie-backports has 26.x.
     if [[ "$driver" =~ ^[0-9]+\.[0-9]+ ]] && ! version_ge "$driver" 25.2; then
       warn "Mesa $driver is older than 25.2: RADV_PERFTEST=nogttspill will be ignored, expect ~1.2x slower - see docs/bonsai.md#other-gpu-backends"

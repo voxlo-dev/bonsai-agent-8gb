@@ -11,10 +11,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/scripts/lib.sh"
 link() {
   mkdir -p "$HOME/.local/bin"
   local b
-  for b in qwen-server qwen-pi qwen-studio kolibri-server kolibri-pi kolibri-studio; do
-    ln -sf "$ROOT/bin/$b" "$HOME/.local/bin/$b"
+  # The links of the commands `las` replaced, only where they still point into this clone.
+  for b in qwen-server qwen-studio kolibri-server kolibri-pi kolibri-studio kolibri; do
+    if [[ -L "$HOME/.local/bin/$b" && "$(readlink "$HOME/.local/bin/$b")" == "$ROOT/bin/"* ]]; then
+      rm "$HOME/.local/bin/$b"
+    fi
   done
-  log "linked qwen-{server,pi,studio} and kolibri-{server,pi,studio} into ~/.local/bin"
+  ln -sf "$ROOT/bin/las" "$HOME/.local/bin/las"
+  log "linked las into ~/.local/bin"
   [[ ":$PATH:" == *":$HOME/.local/bin:"* ]] || warn "~/.local/bin is not on PATH"
 }
 
@@ -95,4 +99,4 @@ for s in "${steps[@]}"; do
   esac
 done
 current=""
-log "done - start the server with: qwen-server (configuration $CONFIG)"
+log "done - start the server with: las serve (configuration $CONFIG)"

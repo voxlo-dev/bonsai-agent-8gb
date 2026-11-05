@@ -92,7 +92,7 @@ if [[ "$autostart" == "true" ]]; then
     say "starting qwen-server in the background, log: $SERVER_LOG"
     # Own session: Ctrl+C in pi must not reach the server, and closing the terminal is
     # handled by the HUP trap above instead of killing it behind our back.
-    setsid "$ROOT/bin/qwen-server" >"$SERVER_LOG" 2>&1 </dev/null 9>&- &
+    setsid "$ROOT/bin/las" serve >"$SERVER_LOG" 2>&1 </dev/null 9>&- &
     pid=$!
     echo "$pid" > "$run/server.pid"
   fi

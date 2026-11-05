@@ -37,7 +37,7 @@ model_parts() {
 # --- the supported models by RAM: preflight reports them, install.sh asks with them ----------
 # A value from a model file without sourcing it, so all of them can be read next to the one MODEL
 # selected: model_var qwen36-35b MODEL_RAM_MB.
-model_var() { sed -n "s/^$2=//p" "$ROOT/models/$1.env" | tr -d '"'; }
+model_var() { sed -n "s/^$2=//p; s/^: \"\${$2:=\(.*\)}\"$/\1/p" "$ROOT/models/$1.env" | tr -d '"'; }
 mem_total_mb() { awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo 2>/dev/null; }
 # What preflight gates MemTotal on: the RAM the model holds while serving plus ~2 GB for the rest.
 ram_needed_mb() { local r; r="$(model_var "$1" MODEL_RAM_MB)"; ((r > 0)) && echo $((r + 2000)) || echo 0; }

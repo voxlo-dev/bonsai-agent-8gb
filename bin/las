@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# The launcher: starts a configuration (configs/NAME.env, a model plus its window, budget and
+# engine) in the foreground on the engine it names, and lists the ones there are.
+#   las serve [--print] [CONFIG] [-- ARGS]   llama-server, Strata or Unsloth Studio (ENGINE);
+#                                            ARGS go to the engine and win over the defaults;
+#                                            --print shows the command instead of running it
+#   las list                                 every configuration: model, engine, window, support
+# CONFIG is the argument, else the environment's, else the default install.sh recorded
+# (config.env). The llama-server flags are scripts/server-flags.sh's, the Strata run config
+# scripts/strata_config.py's. Needs the engine's install: ./install.sh build model.
+# Rationale: docs/dev.md.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+
+usage() {
+  cat >&2 <<'EOF'
+usage: las serve [--print] [CONFIG] [-- ARGS]
+       las list
+EOF
+  exit 1
+}
+
+cmd="${1:-}"
+[[ -n "$cmd" ]] || usage
+shift
+
+case "$cmd" in
+  serve)
+    print=false
+    name=""
+    extra=()
+    while (($#)); do
+      case "$1" in
+        --print) print=true ;;
+        --) shift; extra=("$@"); break ;;
+        -*) echo "xx unknown option '$1' - arguments for the engine go after --" >&2; exit 1 ;;
+        *) [[ -z "$name" ]] || { echo "xx one CONFIG only, got '$name' and '$1'" >&2; exit 1; }
+           name="$1" ;;
+      esac
+      shift
+    done
+    # A named configuration replaces the environment's, and with it the snapshot file the bench set.
+    if [[ -n "$name" ]]; then export CONFIG="$name"; unset CONFIG_FILE; fi
+    ;;
+  list) ;;
+  *) usage ;;
+esac
+
+source "$ROOT/scripts/lib.sh"
+
+# Execs the command, or with --print shows it: one line, quoted so it can be pasted.
+run() {
+  if $print; then
+    printf '%q' "$1"; shift
+    printf ' %q' "$@"
+    printf '\n'
+    exit 0
+  fi
+  exec "$@"
+}
+
+# Preconditions of the llama.cpp engines; --print needs none, it only shows the command.
+need_build() {
+  if $print; then return 0; fi
+  [[ -x "$LLAMA_SERVER" ]] || die "llama-server not found at $LLAMA_SERVER - run CONFIG=$CONFIG ./install.sh build"
+  [[ -f "$MODEL_PATH" ]] || die "model not found at $MODEL_PATH - run CONFIG=$CONFIG ./install.sh model"
+}
+
+serve_llama() {
+  need_build
+  [[ "$VISION" == 0 || -f "$MMPROJ_PATH" || $print == true ]] \
+    || die "vision projector not found at $MMPROJ_PATH - run VISION=1 CONFIG=$CONFIG ./install.sh model"
+  source "$ROOT/scripts/server-flags.sh"
+  local args=(-m "$MODEL_PATH"
+    --host "$LISTEN_HOST" --port "$PORT" --alias "$MODEL_ALIAS"
+    -c "$CTX" "${LOAD_FLAGS[@]}" --parallel 1)
+  if [[ -n "$SPEC_TYPE" ]]; then args+=(--spec-type "$SPEC_TYPE"); fi
+  args+=(--temp "$SAMPLING_TEMP" --top-p "$SAMPLING_TOP_P" --top-k "$SAMPLING_TOP_K" --min-p "$SAMPLING_MIN_P")
+  run "$LLAMA_SERVER" "${args[@]}" "${extra[@]}"
+}
+
+# Strata serves the run config `strata launch` wrote, prepared by scripts/strata_config.py with
+# its approximations on, as Strata ships them; the bench prepares the same file with them off.
+serve_strata() {
+  local out="$LAS_HOME/strata/$CONFIG.json" prepared
+  prepared="$(env STRATA_BIN="$STRATA_BIN" STRATA_VERSION="$STRATA_VERSION" STRATA_CONFIG="$STRATA_CONFIG" \
+    STRATA_OVERRIDES="$STRATA_OVERRIDES" CTX="$CTX" MODEL_ALIAS="$MODEL_ALIAS" LISTEN_HOST="$LISTEN_HOST" \
+    SERVER_HOST="$SERVER_HOST" PORT="$PORT" python3 "$ROOT/scripts/strata_config.py" prepare "$out")" \
+    || die "no Strata run config for $CONFIG - see docs/bench.md and bench/README.md#strata"
+  run "$STRATA_BIN" serve --profile "$prepared" --host "$LISTEN_HOST" --port "$PORT" "${extra[@]}"
+}
+
+# Unsloth Studio on this repo's llama-server, with the same flags. Studio takes the window, the
+# drafting and the sampling as options of its own, and the rest of LOAD_FLAGS passes through to its
+# llama-server, where it wins over what Studio picks itself. Rationale: docs/agent.md#unsloth-studio.
+serve_studio() {
+  VISION=0  # Studio takes no --mmproj, see --no-mmproj below
+  source "$ROOT/scripts/server-flags.sh"
+  local cli="$UNSLOTH_CLI"
+  [[ -x "$cli" ]] || cli="$(command -v unsloth || true)"
+  [[ -n "$cli" ]] || $print || die "Unsloth Studio's unsloth command not found at $UNSLOTH_CLI or on PATH - install Studio (https://github.com/unslothai/unsloth) or set UNSLOTH_CLI"
+  need_build
+
+  # Studio drafts on its own when it finds an MTP head; SPEC_TYPE decides instead.
+  local spec
+  case "$SPEC_TYPE" in
+    draft-mtp) spec=mtp ;;
+    "" | none) spec=off ;;
+    *) die "SPEC_TYPE=$SPEC_TYPE has no Unsloth Studio equivalent here (draft-mtp or none)" ;;
+  esac
+
+  # Studio refuses a top-k above 100; Kolibri-1's card asks for 128. Clamped, since its top-p of
+  # 0.97 leaves ranks past 100 almost no mass (docs/kolibri1.md#settings).
+  local top_k="$SAMPLING_TOP_K"
+  ((top_k <= 100)) || top_k=100
+
+  # Studio's default memory mode, auto, keeps an explicitly requested window and appends the flags
+  # below after its own, so the configuration's placement wins (--fit off, every layer on the card,
+  # the experts of CPU_MOE layers in RAM). Its manual mode would strip them and has no option for
+  # the expert count. One slot: Studio's default of 4 splits CTX.
+  local args=(studio run --model "$MODEL_PATH" --context-length "$CTX"
+    --parallel 1 --speculative-type "$spec"
+    --temperature "$SAMPLING_TEMP" --top-p "$SAMPLING_TOP_P" --top-k "$top_k" --min-p "$SAMPLING_MIN_P"
+    "${LOAD_FLAGS[@]}"
+    # Studio picks a vision projector from beside the GGUF itself, where it may find another model's,
+    # and refuses --mmproj, so VISION does not reach it: text only. See docs/agent.md#unsloth-studio.
+    --no-mmproj
+    # Studio reads the model into memory (--load-mode none) when it estimates it fits; the experts
+    # in RAM are measured mmapped, through the page cache. auto is llama.cpp's default: mmap.
+    --load-mode auto
+    "${extra[@]}")
+  export LLAMA_SERVER_PATH="$LLAMA_SERVER"
+  if $print; then printf 'LLAMA_SERVER_PATH=%q ' "$LLAMA_SERVER_PATH"; fi
+  run "${cli:-unsloth}" "${args[@]}"
+}
+
+# One row per configs/*.env, each read the way `las serve` would: name, model, engine, window,
+# and whether its model is supported (models/*.env MODEL_SUPPORT).
+list_configs() {
+  local f n
+  printf '%-34s %-14s %-7s %7s  %s\n' CONFIG MODEL ENGINE WINDOW SUPPORT
+  for f in "$ROOT"/configs/*.env; do
+    n="$(basename "$f" .env)"
+    (
+      export CONFIG="$n"
+      unset CONFIG_FILE ENGINE CTX MODEL
+      source "$ROOT/config.env"
+      printf '%-34s %-14s %-7s %6sk  %s\n' "$n" "$MODEL" "$ENGINE" "$((CTX / 1024))" "$MODEL_SUPPORT"
+    ) || warn "configs/$n.env does not resolve"
+  done
+}
+
+case "$cmd" in
+  list) list_configs ;;
+  serve)
+    case "$ENGINE" in
+      llama) serve_llama ;;
+      strata) serve_strata ;;
+      studio) serve_studio ;;
+    esac ;;
+esac

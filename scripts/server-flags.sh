@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
-# The llama-server flags of the configuration config.env selected, for the two launchers that
-# start one: bin/qwen-server directly, bin/qwen-studio through Unsloth Studio. Sourced after
+# The llama-server flags of the configuration config.env selected, for the two engines of
+# `las serve` that start one: llama directly, studio through Unsloth Studio. Sourced after
 # config.env. Exports the environment the server needs, and sets LOAD_FLAGS (placement, cache,
 # reasoning, the model file's SERVER_ARGS) and the sampling defaults. The model path, the window,
 # where it listens, the slot count and the drafting stay with each launcher, because Studio takes
@@ -26,6 +26,8 @@ LOAD_FLAGS=(--n-gpu-layers 99 --fit off --flash-attn on)
 if [[ -n "$CPU_MOE" ]]; then LOAD_FLAGS+=(--n-cpu-moe "$CPU_MOE"); fi
 if [[ -n "$UB" ]]; then LOAD_FLAGS+=(--batch-size "$UB" --ubatch-size "$UB"); fi
 LOAD_FLAGS+=(--cache-type-k "$KV_K" --cache-type-v "$KV_V" --no-context-shift --jinja --reasoning on)
+# The model's own template in place of the GGUF's, where the GGUF's does not round-trip a tool call.
+if [[ -n "$CHAT_TEMPLATE_PATH" ]]; then LOAD_FLAGS+=(--chat-template-file "$CHAT_TEMPLATE_PATH"); fi
 if [[ -n "$EFFORT" ]]; then LOAD_FLAGS+=(--reasoning-effort "$EFFORT"); fi
 LOAD_FLAGS+=(--reasoning-budget "$BUDGET" --reasoning-budget-message "$BUDGET_MSG")
 if [[ "$PRESERVE_THINKING" == "true" ]]; then
