@@ -6,7 +6,8 @@
 # for the config its container mounts. Installs no pi, touches nothing outside `dir`; files already
 # there keep every key this does not set. Settings are config.env's, read from `cfg` (a dict) or, on
 # the command line, from the environment: python3 harness/pi.py DIR [--no-bg-bash]
-# pi-bg-bash comes from PI_BG_BASH_URL (default: the npm registry), checked against PI_BG_BASH_SHA256.
+# pi-bg-bash comes from PI_BG_BASH_URL (default: the npm registry), checked against PI_BG_BASH_SHA256,
+# and is kept in $LAS_HOME/cache for the next configuration.
 import json, os, pathlib, re, shutil, sys, tarfile, tempfile, urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -74,26 +75,40 @@ def write_agents(cfg, d):
     (d / "AGENTS.md").write_text("\n".join(out) + "\n")
 
 
+def _bg_bash_package(cfg, tmp):
+    """The pinned pi-bg-bash tarball, checked against PI_BG_BASH_SHA256: from $LAS_HOME/cache once one
+    configuration fetched it, so a new configuration needs no network (the npm registry can hang on
+    IPv6); without LAS_HOME downloaded into `tmp`."""
+    import hashlib
+    version, sha = cfg["PI_BG_BASH_VERSION"], cfg["PI_BG_BASH_SHA256"]
+    home = cfg.get("LAS_HOME")
+    pkg = pathlib.Path(home) / "cache" / f"pi-bg-bash-{version}.tgz" if home else pathlib.Path(tmp) / "pkg.tgz"
+    if pkg.is_file() and hashlib.sha256(pkg.read_bytes()).hexdigest() == sha:
+        return pkg
+    url = cfg.get("PI_BG_BASH_URL") or REGISTRY.format(version=version)
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r:
+            data = r.read()
+    except (OSError, ValueError) as e:
+        sys.exit(f"xx could not download {url} ({e}) - or put the package at {pkg}")
+    if hashlib.sha256(data).hexdigest() != sha:
+        sys.exit(f"xx pi-bg-bash {version} does not match PI_BG_BASH_SHA256 - check the pin in config.env")
+    pkg.parent.mkdir(parents=True, exist_ok=True)
+    pkg.write_bytes(data)
+    return pkg
+
+
 def write_bg_bash(cfg, d):
     """pi-bg-bash into extensions/, replaced whole; its sources sit flat there, since pi discovers a
     subdirectory by its index.ts. Skipped when the pinned version is already in place."""
-    import hashlib
     ext, version = d / "extensions" / "pi-bg-bash", cfg["PI_BG_BASH_VERSION"]
     try:
         if (ext / "VERSION").read_text().strip() == version:
             return
     except FileNotFoundError:
         pass
-    url = cfg.get("PI_BG_BASH_URL") or REGISTRY.format(version=version)
     with tempfile.TemporaryDirectory() as tmp:
-        pkg = pathlib.Path(tmp) / "pkg.tgz"
-        try:
-            with urllib.request.urlopen(url, timeout=60) as r:
-                pkg.write_bytes(r.read())
-        except (OSError, ValueError) as e:
-            sys.exit(f"xx could not download {url} ({e})")
-        if hashlib.sha256(pkg.read_bytes()).hexdigest() != cfg["PI_BG_BASH_SHA256"]:
-            sys.exit(f"xx pi-bg-bash {version} does not match PI_BG_BASH_SHA256 - check the pin in config.env")
+        pkg = _bg_bash_package(cfg, tmp)
         with tarfile.open(pkg) as t:
             t.extractall(tmp, filter="data")
         shutil.rmtree(ext, ignore_errors=True)

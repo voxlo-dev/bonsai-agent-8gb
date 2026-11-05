@@ -194,7 +194,8 @@ returned took longer than 3.8 minutes.
 
 [pi-bg-bash](https://github.com/gvanderclay/pi-bg-bash) (pinned by `PI_BG_BASH_VERSION` and
 `PI_BG_BASH_SHA256` in `config.env`, fetched by `harness/pi.py` from `PI_BG_BASH_URL`, default the npm
-registry's tarball) replaces pi's bash with the same tool plus a `background`
+registry's tarball, once: it keeps it in `$LAS_HOME/cache/`, since the registry can hang on IPv6)
+replaces pi's bash with the same tool plus a `background`
 flag, and adds `bash_output`, `bash_tasks` and `bash_kill`. A background call returns a task id at
 once; when the command exits, a message with its exit state and last lines arrives and starts a
 turn. A foreground call with no `timeout` of its own that is still running after 120 s becomes such

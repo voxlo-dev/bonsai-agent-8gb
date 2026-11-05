@@ -187,7 +187,7 @@ write_harness() {
   env SERVER_URL="$SERVER_URL" MODEL_ALIAS="$MODEL_ALIAS" CTX="$CTX" MAX_TOKENS="$MAX_TOKENS" VISION="$VISION" \
     RESERVE_TOKENS="$RESERVE_TOKENS" KEEP_RECENT_TOKENS="$KEEP_RECENT_TOKENS" \
     PI_BG_BASH_VERSION="$PI_BG_BASH_VERSION" PI_BG_BASH_SHA256="$PI_BG_BASH_SHA256" \
-    PI_BG_BASH_URL="${PI_BG_BASH_URL:-}" python3 "$ROOT/harness/$harness.py" "$dir" >/dev/null || die "could not write the $harness config into $dir"
+    PI_BG_BASH_URL="${PI_BG_BASH_URL:-}" LAS_HOME="$LAS_HOME" python3 "$ROOT/harness/$harness.py" "$dir" >/dev/null || die "could not write the $harness config into $dir"
   log "wrote the $harness config for $CONFIG into $dir"
   case "$harness" in
     pi) log "start it: PI_CODING_AGENT_DIR=$dir pi" ;;
