@@ -59,6 +59,8 @@ first: [Windows](docs/setup.md#windows). Disk and the rest: [Requirements](#requ
 ## Use
 
 ```bash
+las launch pi                   # the default configuration's server if none runs, then pi on it
+las launch opencode qwen36-35b -- --continue   # another one; arguments after -- go to the harness
 las list                        # every configuration: model, engine, window, supported or not
 las serve                       # the default configuration, in the foreground
 las serve qwen38-flash          # another one
@@ -69,11 +71,18 @@ las harness pi qwen36-35b       # pi's config for it, then: PI_CODING_AGENT_DIR=
 las harness opencode qwen36-35b # opencode's, then: OPENCODE_CONFIG=... opencode
 ```
 
+The default configuration is the one `./install.sh` recorded in `$LAS_HOME/default.env`, picked by
+your RAM; `CONFIG` or a name overrides it, and without the file `las` takes the same RAM pick.
+
 The server is a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1` for any tool.
-`las serve` starts nothing but what it is asked to. `las harness` prints the environment variable
-its harness reads and writes into `$LAS_HOME/harness/HARNESS/CONFIG` unless `--dir` says otherwise;
-it never touches `~/.pi` or an opencode config of yours. Unsloth Studio runs the same model with
-the same settings: [details](docs/agent.md#unsloth-studio).
+`las serve` starts nothing but what it is asked to. `las launch` is the short way: it writes the
+harness config, starts the server in the background unless that configuration already serves
+(log in `$LAS_HOME/server.log`), runs pi or opencode from your `PATH`, and stops the server it
+started once the last launched session ends ([details](docs/agent.md#server-lifecycle)).
+`las harness` only writes: into `$LAS_HOME/harness/HARNESS/CONFIG` unless `--dir` says otherwise,
+and prints the environment variable its harness reads. Neither installs a harness or touches
+`~/.pi` or an opencode config of yours. Unsloth Studio runs the same model with the same settings:
+[details](docs/agent.md#unsloth-studio).
 
 ## Speed
 
@@ -123,7 +132,8 @@ harness config matches the server.
 
 **Vision**, off by default: the model reads images, e.g. the screenshots of its own browser tests.
 The projector runs on the CPU, so it costs no VRAM, ~1 GB of RAM and ~10 s per screenshot; it stays
-on once installed, `VISION=0` turns it off: [details](docs/agent.md#vision).
+on once installed, `VISION=0` turns it off. Strata brings its own projector, so a Strata
+configuration sees images whenever its preset does: [details](docs/agent.md#vision).
 
 ```bash
 VISION=1 ./install.sh model

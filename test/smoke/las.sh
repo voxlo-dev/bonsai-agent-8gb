@@ -5,9 +5,10 @@
 # command of each engine with the configuration's window - llama-server, Strata on a prepared run
 # config, Unsloth Studio - and starts nothing; the settings precedence holds (environment over
 # configuration over model file over defaults, and the recorded default configuration over the
-# built-in one); `las harness pi|opencode` write their configs with the configuration's window and
-# URL; `las check` passes against a fake OpenAI-compatible server and names the failing step when it
-# answers no tool call; an unknown configuration is refused. Writes only to a temp dir.
+# ramp's pick for this RAM); `las harness pi|opencode` write their configs with the configuration's
+# window and URL; `las check` passes against a fake OpenAI-compatible server and names the failing
+# step when it answers no tool call; `las launch` reuses that server for a stub harness and refuses
+# one of another configuration; an unknown configuration is refused. Writes only to a temp dir.
 source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib.sh"
 
 work="$(mktemp -d)"
@@ -140,6 +141,10 @@ mode = sys.argv[2]
 
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
+    def do_GET(self):  # /v1/models, listing the alias of its third argument
+        out = json.dumps({"data": [{"id": sys.argv[3]}]}).encode()
+        self.send_response(200); self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(out))); self.end_headers(); self.wfile.write(out)
     def do_POST(self):
         req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         assert req["tools"] and req["tools"][0]["function"]["name"] == "get_weather"
@@ -160,7 +165,7 @@ srv.serve_forever()
 PY
 fake() {  # mode: sets port and fake_pid of a fake server of that mode, in the background
   rm -f "$work/port"
-  python3 -I "$work/fake.py" "$work/port" "$1" >/dev/null 2>&1 &
+  python3 -I "$work/fake.py" "$work/port" "$1" "$alias" >/dev/null 2>&1 &
   fake_pid=$!
   for _ in $(seq 50); do [[ -s "$work/port" ]] && break; sleep 0.1; done
   [[ -s "$work/port" ]] || fail "the fake server did not start"
@@ -169,6 +174,23 @@ fake() {  # mode: sets port and fake_pid of a fake server of that mode, in the b
 trap 'kill "${fake_pid:-}" 2>/dev/null || true; rm -rf "$work"' EXIT
 fake ok
 PORT="$port" "$las" check qwen36-35b >"$work/check.out" 2>&1 || fail "las check failed against a server that calls the tool: $(cat "$work/check.out")"
+
+# las launch on a running server: reused, not started; the harness (a stub pi on PATH) gets the
+# config written for it and the arguments after --, and its exit status is launch's. A server of
+# another configuration and a Studio configuration are refused.
+mkdir -p "$work/bin"
+printf '#!/bin/sh\necho "$PI_CODING_AGENT_DIR $*" > "%s"\nexit 3\n' "$work/pi.out" > "$work/bin/pi"
+chmod +x "$work/bin/pi"
+status=0; PATH="$work/bin:$PATH" PORT="$port" "$las" launch pi qwen36-35b -- -p hi >"$work/launch.out" 2>&1 || status=$?
+[[ $status == 3 ]] || fail "launch did not return the harness's status (got $status): $(cat "$work/launch.out")"
+[[ "$(cat "$work/pi.out")" == "$LAS_HOME/harness/pi/qwen36-35b -p hi" ]] || fail "pi got: $(cat "$work/pi.out")"
+[[ -f "$LAS_HOME/harness/pi/qwen36-35b/models.json" ]] || fail "launch wrote no pi config"
+[[ ! -e "$LAS_HOME/run/server.pid" && -z "$(ls -A "$LAS_HOME/run/sessions")" ]] || fail "launch started a server or left its session"
+PATH="$work/bin:$PATH" PORT="$port" "$las" launch pi lfm25-24b >"$work/launch.out" 2>&1 \
+  && fail "launch accepted a server of another configuration"
+grep -q "serves $alias" "$work/launch.out" || fail "launch did not name the served model: $(cat "$work/launch.out")"
+PATH="$work/bin:$PATH" ENGINE=studio "$las" launch pi qwen36-35b >/dev/null 2>&1 && fail "launch accepted a Studio configuration"
+"$las" launch bogus >/dev/null 2>&1 && fail "launch accepted an unknown harness"
 kill "${fake_pid:-}"
 fake notools
 PORT="$port" "$las" check qwen36-35b >"$work/check.out" 2>&1 && fail "las check passed against a server that never calls the tool"
@@ -177,7 +199,14 @@ kill "${fake_pid:-}"
 PORT="$port" "$las" check qwen36-35b >/dev/null 2>&1 && fail "las check passed against a dead server"
 "$las" check >/dev/null 2>&1 && fail "las check without a configuration was accepted"
 
-# The recorded default configuration is what `las` runs without a name; a name wins over it.
+# Without a name and without default.env, the ramp's pick for this machine's RAM; a recorded
+# default configuration wins over it, and a name over both.
+rec="$(recommended_config "$(mem_total_mb)")"
+if [[ -n "$rec" ]]; then
+  [[ "$("$las" serve --print 2>/dev/null)" == "$("$las" serve --print "$rec")" ]] || fail "without default.env las did not run the ramp's $rec"
+else
+  warn "las smoke: no ramp configuration fits this RAM, the RAM default skipped"
+fi
 mkdir -p "$LAS_HOME"
 printf 'CONFIG=qwen36-35b-display\n' > "$LAS_HOME/default.env"
 [[ "$("$las" serve --print)" == *" -c $(setting qwen36-35b-display CTX) "* ]] || fail "default.env was not used"

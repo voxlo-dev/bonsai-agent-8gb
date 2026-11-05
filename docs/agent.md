@@ -281,7 +281,18 @@ in [qwen38-flash.md](qwen38-flash.md#vision).
 `las serve` runs the engine in the foreground and owns nothing else: it starts no second process,
 keeps no pid files and stops with Ctrl+C or SIGTERM. Run it in a terminal or under your own
 supervisor (a user unit, tmux); a harness is pointed at it with `las harness`. The bench starts
-and stops its own server per configuration. `las check CONFIG` asks the running server for a tool
+and stops its own server per configuration.
+
+`las launch pi|opencode` is the other way, one command per session: it rewrites the harness config
+(so the two consumers of [the budget](#context-budget) cannot drift), then reuses a server that
+serves the configuration's alias, refuses one serving another model, and otherwise runs
+`las serve` in the background in a session of its own (`setsid`, log `SERVER_LOG`), waiting up to
+`SERVER_START_TIMEOUT` for `/v1/models`. Each launch registers its pid under `$LAS_HOME/run/sessions/`
+behind a `flock`; the last to leave stops the server, by its process group so Strata's vision
+process goes with it, and only one a launch started (`run/server.pid`): a `las serve` of your own
+is never stopped. A session killed without its trap is pruned by the next launch, which then
+adopts its server. A `SERVER_HOST` on another machine is never started, nor a Studio
+configuration (its own port and login). `las check CONFIG` asks the running server for a tool
 call and its answer, so a model whose chat template mangles tool calls shows up before an agent
 session does.
 

@@ -12,12 +12,18 @@
 #                                            writes that harness's config for CONFIG (harness/*.py)
 #                                            into DIR, default $LAS_HOME/harness/HARNESS/CONFIG;
 #                                            installs no harness, touches nothing else
+#   las launch pi|opencode [CONFIG] [-- ARGS]
+#                                            writes that config, starts CONFIG's server in the
+#                                            background unless it runs, then the harness from PATH
+#                                            with ARGS; the last session leaving stops that server
 # CONFIG is the argument, else the environment's, else the default install.sh recorded
-# (config.env). The llama-server flags are scripts/server-flags.sh's, the Strata run config
+# (config.env); for serve and launch without any of them, the ramp's recommendation for this RAM.
+# The llama-server flags are scripts/server-flags.sh's, the Strata run config
 # scripts/strata_config.py's. Needs the engine's install: ./install.sh build model.
 # Rationale: docs/dev.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+argv=("$@")
 
 usage() {
   cat >&2 <<'EOF'
@@ -25,6 +31,7 @@ usage: las serve [--print] [CONFIG] [-- ARGS]
        las list
        las check CONFIG [-- ARGS]
        las harness pi|opencode CONFIG [--dir DIR]
+       las launch pi|opencode [CONFIG] [-- ARGS]
 EOF
   exit 1
 }
@@ -32,6 +39,8 @@ EOF
 cmd="${1:-}"
 [[ -n "$cmd" ]] || usage
 shift
+# No configuration from the argument or the environment: config.env falls back to default.env.
+config_given=false; [[ -n "${CONFIG:-}" ]] && config_given=true
 
 case "$cmd" in
   serve)
@@ -74,10 +83,28 @@ case "$cmd" in
     done
     export CONFIG="$name"; unset CONFIG_FILE
     ;;
+  launch)
+    harness="${1:-}"; name=""; extra=(); print=false; dir=""
+    case "$harness" in pi | opencode) shift ;; *) usage ;; esac
+    if (($#)) && [[ "$1" != -- ]]; then name="$1"; shift; fi
+    if (($#)); then [[ "$1" == -- ]] || usage; shift; extra=("$@"); fi
+    if [[ -n "$name" ]]; then export CONFIG="$name"; unset CONFIG_FILE; fi
+    ;;
   *) usage ;;
 esac
+[[ -n "${name:-}" ]] && config_given=true
 
 source "$ROOT/scripts/lib.sh"
+
+# Neither named nor recorded by install.sh: the configuration the ramp recommends for this RAM,
+# instead of config.env's fixed fallback. Runs las again, since config.env is sourced only once.
+if [[ "$cmd" == serve || "$cmd" == launch ]] && ! $config_given && [[ ! -f "$LAS_HOME/default.env" ]]; then
+  rec="$(recommended_config "$(mem_total_mb)")"
+  if [[ -n "$rec" && "$rec" != "$CONFIG" ]]; then
+    log "no configuration named and none recorded in $LAS_HOME/default.env: $rec, the ramp's pick for this RAM" >&2
+    CONFIG="$rec" exec "$0" "${argv[@]}"
+  fi
+fi
 
 # Execs the command, or with --print shows it: one line, quoted so it can be pasted.
 run() {
@@ -200,10 +227,93 @@ check_tools() {
   SERVER_URL="$SERVER_URL" MODEL_ALIAS="$MODEL_ALIAS" exec python3 "$ROOT/scripts/check_tools.py" "$@"
 }
 
+# The harness with its config written fresh, on CONFIG's server: reused when one runs, else started
+# in the background here. Sessions register under $LAS_HOME/run behind a lock, so a second launch
+# shares the server and only the last to leave stops it, and only a server launch started; one
+# whose session died without its trap is adopted by the next. See docs/agent.md#server-lifecycle.
+launch() {
+  local bin run pid models served i status=0
+  case "$harness" in pi) bin=pi ;; opencode) bin=opencode ;; esac
+  has "$bin" || die "$bin not found on PATH - install it yourself (README.md#harnesses); las installs no harness"
+  [[ "$ENGINE" != studio ]] || die "$CONFIG runs in Unsloth Studio, which serves on its own port behind its own login - launch a llama or Strata configuration"
+  write_harness >/dev/null
+  # Ready means the engine lists its models, Strata and llama-server alike.
+  healthy() { curl -sf -o /dev/null --max-time 2 "$SERVER_URL/v1/models"; }
+  alive() { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
+  run="$LAS_HOME/run"
+  mkdir -p "$run/sessions"
+  exec 9>"$run/lock"
+  # Sessions whose process is gone (SIGKILL, a terminal closed hard) never ran their trap.
+  prune() { local f; for f in "$run/sessions"/*; do [[ -e "$f" ]] && ! alive "${f##*/}" && rm -f "$f"; done; return 0; }
+  leave() {
+    flock 9
+    rm -f "$run/sessions/$$"
+    prune
+    local pid; pid="$(cat "$run/server.pid" 2>/dev/null || true)"
+    if [[ -z "$(ls -A "$run/sessions")" ]] && alive "$pid"; then
+      log "stopping the server of $(cat "$run/server.config" 2>/dev/null || echo "$CONFIG")" >&2
+      kill -- "-$pid" 2>/dev/null || kill "$pid"
+      for _ in {1..40}; do alive "$pid" || break; sleep 0.5; done
+      alive "$pid" && kill -9 -- "-$pid" 2>/dev/null
+    fi
+    alive "$pid" || rm -f "$run/server.pid" "$run/server.config"
+    flock -u 9
+  }
+  flock 9
+  prune
+  touch "$run/sessions/$$"
+  trap leave EXIT
+  trap 'exit 129' HUP
+  trap 'exit 143' TERM
+  trap 'exit 130' INT
+  pid="$(cat "$run/server.pid" 2>/dev/null || true)"
+  if ! healthy && ! alive "$pid"; then
+    case "$SERVER_HOST" in
+      127.0.0.1 | ::1 | localhost) ;;
+      *) flock -u 9; die "no server at $SERVER_URL - SERVER_HOST is another machine, start las serve $CONFIG there" ;;
+    esac
+    log "starting $CONFIG in the background, log: $SERVER_LOG" >&2
+    # Its own session: Ctrl+C in the harness must not reach the engine, and stopping it reaches
+    # every process the engine started (Strata's vision process too).
+    setsid env CONFIG="$CONFIG" "$ROOT/bin/las" serve >"$SERVER_LOG" 2>&1 </dev/null 9>&- &
+    pid=$!
+    echo "$pid" >"$run/server.pid"
+    echo "$CONFIG" >"$run/server.config"
+  fi
+  flock -u 9
+  if ! healthy; then
+    log "waiting for the model to load (up to SERVER_START_TIMEOUT, ${SERVER_START_TIMEOUT}s)" >&2
+    for ((i = 0; i < SERVER_START_TIMEOUT; i++)); do
+      healthy && break
+      if ! alive "$pid"; then
+        warn "the server exited during start - last lines of $SERVER_LOG:"
+        tail -20 "$SERVER_LOG" >&2 || true
+        die "see docs/setup.md#troubleshooting"
+      fi
+      sleep 1
+    done
+    healthy || die "the server is not ready after ${SERVER_START_TIMEOUT}s - raise SERVER_START_TIMEOUT, its log is $SERVER_LOG"
+  fi
+  # The server on PORT may be another configuration's: the harness would talk to the wrong model.
+  models="$(curl -sf --max-time 5 "$SERVER_URL/v1/models" || true)"
+  if ! grep -q "\"$MODEL_ALIAS\"" <<<"$models"; then
+    served="$(grep -o '"id" *: *"[^"]*"' <<<"$models" | head -1 | sed 's/.*"\([^"]*\)"$/\1/' || true)"
+    die "the server at $SERVER_URL serves ${served:-another model}, not $MODEL_ALIAS ($CONFIG) - stop it first, or give one of them another PORT"
+  fi
+  # The harness handles Ctrl+C itself; caught here, bash resets it for the child and keeps the trap.
+  trap : INT
+  case "$harness" in
+    pi) PI_CODING_AGENT_DIR="$dir" pi "${extra[@]}" 9>&- || status=$? ;;
+    opencode) OPENCODE_CONFIG="$dir/opencode.json" opencode "${extra[@]}" 9>&- || status=$? ;;
+  esac
+  exit "$status"
+}
+
 case "$cmd" in
   list) list_configs ;;
   check) check_tools "$@" ;;
   harness) write_harness ;;
+  launch) launch ;;
   serve)
     case "$ENGINE" in
       llama) serve_llama ;;
