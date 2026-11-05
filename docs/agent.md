@@ -268,6 +268,13 @@ Through pi: a `pi -p` session against a stand-in server recorded the request pi 
 answered from the picture: a Tron light-cycle game, both names, `GO!`, two trails heading for the
 centre (`runs/T-048-vision/mock.py`).
 
+**Under Strata the engine brings it.** `strata launch` writes `--vision` and its own projector into
+the run config, served by a `strata-vision` process on the CPU; nothing of ours is loaded, and
+`IMAGE_MAX_TOKENS` does not reach it. `VISION` left empty follows that run config, so a Strata
+configuration has the harness configs send images whenever Strata serves them, with or without
+our projector in `LAS_HOME`; `VISION=0` only keeps the harness text-only. Measured for Qwen3.8-Flash
+in [qwen38-flash.md](qwen38-flash.md#vision).
+
 ## Server lifecycle
 
 `las serve` runs the engine in the foreground and owns nothing else: it starts no second process,

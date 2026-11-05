@@ -295,6 +295,14 @@ At cap 512 it read both screens' state, the names, `GO!`, `DOUBLE KO!` and the b
 trails one above the other where they run side by side, and got one footer word wrong. Encode
 10.3 s; its own pass over the 476 image tokens 6-9 s more, on the CPU like any prompt.
 
+Under Strata (0.2.10, `qwen38-flash-gsq-iq3xxs-strata`, its `mmproj-Qwen3.8-Flash-Next-BF16.gguf`
+on the CPU, 2026-11-05, `runs/strata-vision/`), a 1000x620 terminal screenshot with a traceback,
+an 11 px table, a 9 px grey status line and a colour legend: all five questions right, the build
+hash and pid from the 9 px line included, in 27 s with 745 tokens of thinking. The request counted
+444 prompt tokens with the image, far below llama.cpp's ~480 image tokens alone, so the picture
+seems to reach the model as the vision process's text; its thinking carried the whole table
+verbatim. Spatial questions (where on the screen) are not tested.
+
 ## In an agent session
 
 Three Tron sessions ([agent-sessions.md](agent-sessions.md)): D (2026-09-29, under WSL2) ended in
