@@ -6,6 +6,10 @@
 #                                            ARGS go to the engine and win over the defaults;
 #                                            --print shows the command instead of running it
 #   las list                                 every configuration: model, engine, window, support
+#   las harness pi|opencode CONFIG [--dir DIR]
+#                                            writes that harness's config for CONFIG (harness/*.py)
+#                                            into DIR, default $LAS_HOME/harness/HARNESS/CONFIG;
+#                                            installs no harness, touches nothing else
 # CONFIG is the argument, else the environment's, else the default install.sh recorded
 # (config.env). The llama-server flags are scripts/server-flags.sh's, the Strata run config
 # scripts/strata_config.py's. Needs the engine's install: ./install.sh build model.
@@ -17,6 +21,7 @@ usage() {
   cat >&2 <<'EOF'
 usage: las serve [--print] [CONFIG] [-- ARGS]
        las list
+       las harness pi|opencode CONFIG [--dir DIR]
 EOF
   exit 1
 }
@@ -44,6 +49,20 @@ case "$cmd" in
     if [[ -n "$name" ]]; then export CONFIG="$name"; unset CONFIG_FILE; fi
     ;;
   list) ;;
+  harness)
+    harness="${1:-}"; name="${2:-}"; dir=""
+    case "$harness" in pi | opencode) ;; *) usage ;; esac
+    [[ -n "$name" && "$name" != -* ]] || usage
+    shift 2
+    while (($#)); do
+      case "$1" in
+        --dir) [[ $# -ge 2 ]] || usage; dir="$2"; shift ;;
+        *) usage ;;
+      esac
+      shift
+    done
+    export CONFIG="$name"; unset CONFIG_FILE
+    ;;
   *) usage ;;
 esac
 
@@ -151,8 +170,23 @@ list_configs() {
   done
 }
 
+# The harness's config for the configuration, and the line that starts the harness with it.
+write_harness() {
+  dir="${dir:-$LAS_HOME/harness/$harness/$CONFIG}"
+  env SERVER_URL="$SERVER_URL" MODEL_ALIAS="$MODEL_ALIAS" CTX="$CTX" MAX_TOKENS="$MAX_TOKENS" VISION="$VISION" \
+    RESERVE_TOKENS="$RESERVE_TOKENS" KEEP_RECENT_TOKENS="$KEEP_RECENT_TOKENS" \
+    PI_BG_BASH_VERSION="$PI_BG_BASH_VERSION" PI_BG_BASH_SHA256="$PI_BG_BASH_SHA256" \
+    PI_BG_BASH_URL="${PI_BG_BASH_URL:-}" python3 "$ROOT/harness/$harness.py" "$dir" >/dev/null || die "could not write the $harness config into $dir"
+  log "wrote the $harness config for $CONFIG into $dir"
+  case "$harness" in
+    pi) log "start it: PI_CODING_AGENT_DIR=$dir pi" ;;
+    opencode) log "start it: OPENCODE_CONFIG=$dir/opencode.json opencode" ;;
+  esac
+}
+
 case "$cmd" in
   list) list_configs ;;
+  harness) write_harness ;;
   serve)
     case "$ENGINE" in
       llama) serve_llama ;;

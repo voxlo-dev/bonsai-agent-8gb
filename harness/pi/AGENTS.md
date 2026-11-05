@@ -1,6 +1,6 @@
-<!-- qwen-agent-8gb: global guidance for pi, installed to $PI_AGENT_DIR/AGENTS.md by scripts/pi.sh,
-     which keeps one of the two vision lines at the end, after VISION. Not this project's AGENTS.md -
-     that one is in the repo root. -->
+<!-- Global guidance for pi, written to AGENTS.md of its config dir by harness/pi.py, which keeps one
+     of the two vision lines at the end, after VISION. Not this project's AGENTS.md - that one is in
+     the repo root. -->
 
 ## Working here
 

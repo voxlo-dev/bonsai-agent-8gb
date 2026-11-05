@@ -12,7 +12,7 @@ link() {
   mkdir -p "$HOME/.local/bin"
   local b
   # The links of the commands `las` replaced, only where they still point into this clone.
-  for b in qwen-server qwen-studio kolibri-server kolibri-pi kolibri-studio kolibri; do
+  for b in qwen-server qwen-pi qwen-studio kolibri-server kolibri-pi kolibri-studio kolibri; do
     if [[ -L "$HOME/.local/bin/$b" && "$(readlink "$HOME/.local/bin/$b")" == "$ROOT/bin/"* ]]; then
       rm "$HOME/.local/bin/$b"
     fi
