@@ -14,11 +14,10 @@ body:
         - install.sh deps
         - install.sh build
         - install.sh model
-        - install.sh pi
         - install.sh link
-        - qwen-server (starting or running)
-        - qwen-pi (the agent session)
-        - qwen-pi --localagent (the frozen workflow, not recommended)
+        - las serve (starting or running)
+        - las check or las harness
+        - the bench (bench/run.py)
         - something else
     validations:
       required: true

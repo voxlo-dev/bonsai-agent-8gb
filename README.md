@@ -1,29 +1,43 @@
-# Qwen Agent for 8 GB VRAM
+# Local Agent Suite
 
-**A local coding agent on an ordinary 8 GB graphics card, two to nine times faster than
-download-and-go.** The card was never the limit: the RAM next to it decides how large a model it
-runs.
+**Docs and a bench for running coding-agent models on an ordinary 8 GB graphics card.** The card
+was never the limit: the RAM next to it decides how large a model it runs. This repo holds what
+was measured about that, the bench that measures it, and a launcher that starts any measured
+setup.
 
-One command builds llama.cpp, fetches a model and sets up the
-[pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) coding agent against it, tuned
-to the last few hundred megabytes of the card. Then `qwen-pi` in your project: an agent that reads
-your files, runs your tests and edits your code. No API key, no rate limit, nothing leaves the
-machine.
+- **Configurations**: `configs/NAME.env` is a model plus its window, budget, KV cache and engine.
+  The launcher serves one, the bench measures one.
+- **`las`**: starts a configuration on llama-server, [Strata](https://github.com/Niko1221/Strata)
+  or [Unsloth Studio](https://github.com/unslothai/unsloth), checks its tool calls, and writes a
+  ready-made config for the coding agents [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
+  and [opencode](https://opencode.ai). It installs neither.
+- **The bench** ([`bench/`](bench/README.md)): agent tasks (pi in a container, a hidden checker),
+  chat tasks and a speed test, over configurations x tasks x repeats, with an HTML dashboard.
+  Results: [docs/bench.md](docs/bench.md).
+- **The reasons**: every non-default setting answers a failure seen on real hardware, and the
+  measurement behind it is in [`docs/`](docs/dev.md).
 
 ## Which model
 
 Mixture-of-experts models only use a few billion parameters per token, so their experts can live
-in system RAM while the card holds the rest. More RAM, a bigger model:
+in system RAM while the card holds the rest. More RAM, a bigger model. **Supported** models are
+offered by `./install.sh` and recommended by preflight; **unsupported** ones run and bench like any
+other, but are not offered until a bench run has measured them.
 
-| RAM next to the card | Model | Speed | Window | Good for |
+| RAM next to the card | Model | Speed | Window | Support |
 | --- | --- | --- | --- | --- |
-| any | [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf), all on the card | 40 tok/s | 64k | small, well-scoped tasks |
-| **32 GB** | **[Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)** | **52-65 tok/s** | **131k** | **most work: fast, and the default** |
-| 64 GB | [Qwen3.8-Flash-Next](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF), 125B | ~19 tok/s | 131k | the strongest, for when it may take longer |
-| 64 GB | [Kolibri-1](https://huggingface.co/Aleph-Alpha/Kolibri-1), 78B, on a patched llama.cpp | ~44 tok/s | 131k | German and English; no valid agent session yet ([details](docs/kolibri1.md)) |
+| **32 GB** | **[Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B)** (`qwen36-35b`) | **52-65 tok/s** | **131k** | **supported, the default: fast, most work** |
+| 64 GB | [Qwen3.8-Flash-Next](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF), 125B (`qwen38-flash`) | ~19 tok/s | 131k | supported, the strongest, for when it may take longer |
+| any | [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf), all on the card (`bonsai`) | 40 tok/s | 64k | unsupported until benched ([details](docs/bonsai.md)) |
+| 64 GB | [Kolibri-1](https://huggingface.co/Aleph-Alpha/Kolibri-1), 78B, on a patched llama.cpp (`kolibri1`) | ~44 tok/s | 131k | unsupported until benched; no valid agent session yet ([details](docs/kolibri1.md)) |
 
-`./install.sh` reads your RAM, shows which of them run, and asks. How they did as agents on
-the same task: [the agent sessions](docs/agent-sessions.md).
+`./install.sh` reads your RAM, shows the supported ones and asks. How they did as agents on the
+same task: [the agent sessions](docs/agent-sessions.md).
+
+A model of another architecture gets its own llama.cpp tree, its chat template and a checked
+tool-call round-trip, with no installer entry; LFM2.5-24B is the first candidate (hoped to replace
+Bonsai), its model file waiting for its GGUF. The path is in the
+[`bench-add-model` skill](.agents/skills/bench-add-model/SKILL.md) and [docs/dev.md](docs/dev.md).
 
 ## Install
 
@@ -43,24 +57,21 @@ first: [Windows](docs/setup.md#windows). Disk and the rest: [Requirements](#requ
 ## Use
 
 ```bash
-qwen-pi            # in your project directory; arguments go to pi
+las list                        # every configuration: model, engine, window, supported or not
+las serve                       # the default configuration, in the foreground
+las serve qwen38-flash          # another one
+las serve qwen36-35b -- --port 9000   # arguments after -- go to the engine
+las serve --print qwen36-35b    # the command, not started
+las check qwen36-35b            # tool-call round-trip against the running server
+las harness pi qwen36-35b       # pi's config for it, then: PI_CODING_AGENT_DIR=... pi
+las harness opencode qwen36-35b # opencode's, then: OPENCODE_CONFIG=... opencode
 ```
 
-`qwen-pi` starts the server in the background, waits for the model and stops it after the last
-session. To keep it running, start it yourself:
-
-```bash
-qwen-server        # terminal 1, ready at "listening on http://127.0.0.1:8080"
-qwen-pi            # terminal 2
-```
-
-The server is also a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1` for any other
-tool. `qwen-studio` opens the same model with the same settings in
-[Unsloth Studio](https://github.com/unslothai/unsloth)'s chat UI, at the same speed and VRAM:
-[details](docs/agent.md#unsloth-studio).
-
-Kolibri-1 has its own three: `kolibri-pi`, `kolibri-server` and `kolibri-studio` run it whatever
-model is recorded, after `MODEL=kolibri1 ./install.sh`.
+The server is a plain OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1` for any tool.
+`las serve` starts nothing but what it is asked to. `las harness` prints the environment variable
+its harness reads and writes into `$LAS_HOME/harness/HARNESS/CONFIG` unless `--dir` says otherwise;
+it never touches `~/.pi` or an opencode config of yours. Unsloth Studio runs the same model with
+the same settings: [details](docs/agent.md#unsloth-studio).
 
 ## Speed
 
@@ -75,7 +86,7 @@ Ryzen 7 7800X3D, 64 GB RAM:
 
 The biggest single step after the configuration: **do not let this GPU drive your monitor.** A
 desktop takes 0.5-1.2 GB of VRAM and GPU time, both out of the model; plug the monitor into the
-mainboard's iGPU. If you cannot, `PROFILE=display` makes room. Bonsai's WSL2 figure predates its
+mainboard's iGPU. If you cannot, the `-display` configuration of each model (`las serve qwen36-35b-display`) makes room. Bonsai's WSL2 figure predates its
 current llama.cpp pin, which is 8 % faster on native Linux. Where each number comes from:
 [docs/performance.md](docs/performance.md) and the pages per model.
 
@@ -94,7 +105,7 @@ On an 8 GB card with the same GGUF, this repo is the better fit:
 | Window | 131k | 4.6-8k, chosen by its setup on a card this size |
 | Experts per token | all 10, exact | missed low-ranked experts skipped by default, about one quant step of accuracy by its own measurement |
 | Decode | 19.0-19.6 tok/s short, 14.3 at 110k | 14.3 and 19.4 on two short requests at 8k |
-| Coding agent | pi set up against it, the context budget measured | pi's requests are refused at that window until `fit_max_tokens` is set |
+| Coding agent | harness configs written for it, the context budget measured | pi's requests are refused at that window until `fit_max_tokens` is set |
 
 Strata is faster on 8 GB in one setup: its own 3-bit quant, measured less accurate than this
 repo's, ran an 8 GB laptop at ~29 tok/s with a 262k window. Nothing of Strata's transfers to
@@ -103,27 +114,29 @@ llama.cpp by a flag, but reading it found the dense attention above. The full co
 
 ## Configure
 
-Each model has two profiles: `dedicated` (default) for a card that drives no display, `display`
-for one that does. Settings live in [`config.env`](config.env), each with a comment; an
-environment variable always wins, and arguments go straight to llama-server:
+A configuration is one file in [`configs/`](configs/), named for what it is: `qwen36-35b` is the
+model on a card that drives no display, `qwen36-35b-display` the same for one that does,
+`qwen36-35b-vulkan` the AMD path. `las list` shows them all. Each sets `MODEL=` (a file in
+[`models/`](models/): the GGUF pin, the llama.cpp tree, KV types, sampling) and the window and
+budget values that constrain each other ([Context budget](docs/agent.md#context-budget)), and
+may set `ENGINE=llama|strata|studio`. Settings and their defaults are in [`config.env`](config.env),
+each with a comment. Precedence: environment, then the configuration, then the model file, then
+the defaults:
 
 ```bash
-PROFILE=display ./install.sh pi && PROFILE=display qwen-pi
-MODEL=qwen38-flash qwen-pi
-qwen-server --port 9000
+CONFIG=qwen38-flash las serve
+CTX=65536 las serve qwen36-35b
 ```
 
-After changing the profile, the window or the port, run `./install.sh pi` again so pi's copy
-matches the server. The window and pi's budget values constrain each other:
-[Context budget](docs/agent.md#context-budget).
+After changing the window, the port or the budget, run `las harness pi CONFIG` again so the
+harness config matches the server.
 
-**Vision**, off by default: the model reads images, e.g. the screenshots of its own browser tests,
-through pi's `read`. The projector runs on the CPU, so it costs no VRAM, ~1 GB of RAM and ~10 s
-per screenshot; it stays on once installed, `VISION=0` turns it off:
-[details](docs/agent.md#vision).
+**Vision**, off by default: the model reads images, e.g. the screenshots of its own browser tests.
+The projector runs on the CPU, so it costs no VRAM, ~1 GB of RAM and ~10 s per screenshot; it stays
+on once installed, `VISION=0` turns it off: [details](docs/agent.md#vision).
 
 ```bash
-VISION=1 ./install.sh model pi
+VISION=1 ./install.sh model
 ```
 
 ## Requirements
@@ -141,44 +154,42 @@ CUDA >= 12.8. If you run one, a [hardware report](../../issues/new?template=hard
 the most useful thing you can send. Not supported: less than 8 GB of VRAM, ROCm, Metal, CPU-only.
 
 Disk: 22 GB for Qwen3.6, 88 GB for Qwen3.8-Flash, 6 GB for Bonsai, plus ~10 GB for the build and
-the CUDA toolkit. Drivers, toolkit versions, Node for pi and what `deps` installs per distro:
+the CUDA toolkit. Drivers, toolkit versions, Node for the bench's pi image and what `deps` installs per distro:
 [docs/setup.md](docs/setup.md#toolchain).
 
 ## Install in detail
 
-`./install.sh` runs `deps build model pi link` in order; name steps to run only those.
+`./install.sh` runs `deps build model link` in order; name steps to run only those.
 
 | Step | Does |
 | --- | --- |
 | `deps` | the apt toolchain: CUDA or Vulkan, cmake, gcc (asks for sudo) |
 | `build` | the model's llama.cpp tree at its pinned version (`FORCE=1` rebuilds) |
 | `model` | the GGUF, from the Hugging Face cache or downloaded, checksummed |
-| `pi` | its own pinned pi with a config for the model and [pi-bg-bash](https://github.com/gvanderclay/pi-bg-bash) for background commands; your own pi and `~/.pi` stay untouched |
-| `link` | `qwen-server`, `qwen-pi`, `qwen-studio` and their `kolibri-*` twins into `~/.local/bin` |
+| `link` | `las` into `~/.local/bin` |
 
-The model you pick is recorded in `$QWEN_HOME/model.env` and used by every `qwen-*` command. A
-second one installs next to it with `MODEL=bonsai ./install.sh` and runs with `MODEL=bonsai qwen-pi`.
-Everything lands in `~/.local/share/qwen-local` (`QWEN_HOME`); an install from before the rename,
-in `~/.local/share/bonsai-local`, stays where it is and keeps running Bonsai.
+The configuration you pick (a supported model's) is recorded in `$LAS_HOME/default.env` and is what
+`las` runs without a name. Another one installs next to it with `CONFIG=bonsai ./install.sh`
+and runs with `las serve bonsai`. Everything lands in `~/.local/share/local-agent-suite`
+(`LAS_HOME`); moving an existing data dir: [docs/setup.md](docs/setup.md#moving-an-existing-data-dir).
 
 ## How it was measured
 
 Every non-default setting in this repo answers a failure seen on real hardware, and the
 measurement behind it is in [`docs/`](docs/dev.md). Speed, VRAM and windows are reproducible.
-Agent quality is a handful of single sessions on one prompt, enough to put Qwen3.6 ahead of Bonsai
-and not more; a reproducible test is next. The starting point was a study of eight local models
-as coding agents on an 8 GB card: [docs/model-comparison.md](docs/model-comparison.md).
+Agent quality is measured by [the bench](bench/README.md); the early sessions were single runs on
+one prompt ([docs/agent-sessions.md](docs/agent-sessions.md)). The starting point was a study of
+eight local models as coding agents on an 8 GB card:
+[docs/model-comparison.md](docs/model-comparison.md).
 
 ## Uninstall
 
 ```bash
-rm -rf ~/.local/share/qwen-local ~/.local/bin/qwen-server ~/.local/bin/qwen-pi ~/.local/bin/qwen-studio
-rm -f ~/.local/bin/kolibri-server ~/.local/bin/kolibri-pi ~/.local/bin/kolibri-studio
-rm -rf ~/.local/state/pi-bg   # pi-bg-bash's task logs
+rm -rf ~/.local/share/local-agent-suite ~/.local/bin/las
+rm -rf ~/.local/state/pi-bg   # pi-bg-bash's task logs, if a pi session ran with it
 ```
 
-That includes the models, pi and its sessions (`bonsai-local` for an install from before the
-rename). The apt packages from `deps` stay.
+That includes the models and the harness configs. The apt packages from `deps` stay.
 
 ## Contributing
 
@@ -207,7 +218,7 @@ Provided as is, no warranty: see [LICENSE](LICENSE).
 - Mesa and RADV, and [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) by earendil-works
 
 The weights are their authors', under the licenses on their model cards, downloaded at install
-time and never redistributed here. The model comparison and the localagent workflow come from a
+time and never redistributed here. The model comparison and the localagent record come from a
 project thesis at Technische Hochschule Mittelhessen by this repo's author.
 
 **License: [MIT](LICENSE)**, including the `PTQ1_0` Vulkan loader in [`patches/vulkan`](patches/vulkan/),

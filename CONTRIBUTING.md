@@ -29,20 +29,21 @@ instead.
 | --- | --- |
 | Server flags | start it, query `http://127.0.0.1:8080/props`, or render a conversation through `/apply-template` |
 | Vulkan kernels | a generation and prompt measurement at a stated window, judged by tok/s; VRAM is misleading, RADV only reports it meaningfully after the first request |
-| pi's config | read back `$QWEN_HOME/pi-agent/models.json` and `settings.json` |
-| pi's behaviour | its session logs, JSONL under `$QWEN_HOME/pi-agent/sessions/`, one entry per message with token counts and compaction records |
+| `las`, `config.env`, a configuration | `test/smoke/las.sh`: `list`, `serve --print` per engine, precedence, both harness writers |
+| A harness config | `las harness pi CONFIG --dir <tmp>`, read back `models.json` and `settings.json` |
+| pi's behaviour | its session logs, JSONL under `$LAS_HOME/bench/pi-agent-{config}/sessions/`, one entry per message with token counts and compaction records |
 | Any script | `bash -n` on it, and run the step twice to confirm it is still idempotent |
 
 ## Conventions
 
-- POSIX-ish bash, `set -euo pipefail` through `scripts/lib.sh`; `bin/qwen-server` sets it itself.
+- POSIX-ish bash, `set -euo pipefail` through `scripts/lib.sh`; `bin/las` sets it itself.
 - A comment block at the top of every script saying what it does and what it needs.
 - Settings are declared in `config.env` only, or in `models/*.env` and
-  `profiles/{model}/*.env` for per-model pins and flags and the window and budget
+  `configs/*.env` for per-model pins and flags and the window and budget
   values. Never hard-code one in a consumer.
 - Every install step stays idempotent: check whether the work is done, exit early if it is.
-- Nothing is installed into the repo, and nothing into the user's own tools. No global npm package,
-  nothing under `~/.pi`.
+- Nothing is installed into the repo, and nothing into the user's own tools. No global npm package, no harness
+  installed, nothing under `~/.pi`.
 - `SPDX-License-Identifier: MIT` at the top of new scripts.
 
 [`AGENTS.md`](AGENTS.md) is the full version of this, and is also what an AI coding agent working
@@ -62,9 +63,9 @@ you checked.
 ## The three things most worth sending
 
 1. **A hardware report.** Any 8 GB card that is not an RTX 4060 Ti or an RX 570. Card, backend,
-   driver, distro, `CTX`, generation and prompt tok/s, and whether the 64k profile fits. There is
+   driver, distro, `CTX`, generation and prompt tok/s, and whether the 64k configuration fits. There is
    an issue template for it.
-2. **A failure with its log.** The last 30 lines of `$QWEN_HOME/server.log` or the build log say
+2. **A failure with its log.** The last 30 lines of the server's terminal output or the build log say
    more than a description does.
 3. **Vulkan kernel work.** The `PTQ1_0` decode currently looks each byte up five times per token
    and sits about 3x off what the card's memory bandwidth allows. A dedicated `mul_mat_vec` shader
@@ -92,7 +93,7 @@ your own tasks or families in the format of `bench/examples/` and keep them priv
 
 - A test framework.
 - Changing one of `CTX`, `BUDGET`, `MAX_TOKENS`, `RESERVE_TOKENS` or `KEEP_RECENT_TOKENS` on its
-  own. They constrain each other arithmetically and move together, in a profile.
+  own. They constrain each other arithmetically and move together, in a configuration.
 - Support for ROCm, Metal or CPU-only inference. Two backends is what one person can keep measured.
 - A native Windows port. WSL2 is the Windows path and the reference platform for every CUDA
   number here; a PowerShell second implementation of the install and of the server lifecycle is

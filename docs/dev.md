@@ -7,7 +7,8 @@ on 2026-10-03, T-047):
 | File | Holds |
 | --- | --- |
 | [setup.md](setup.md) | build flags, toolchain and CUDA per distro, Secure Boot, Windows, RAM and build memory, preflight, troubleshooting |
-| [agent.md](agent.md) | pi and its context budget, the agent prompt, vision, the server lifecycle, Unsloth Studio, the localagent workflow |
+| [agent.md](agent.md) | the harness configs (pi, opencode) and the context budget, the agent prompt, vision, the server lifecycle, Unsloth Studio |
+| [localagent.md](localagent.md) | the frozen localagent workflow: its shape, why it is not recommended, the measured runs |
 | [agent-sessions.md](agent-sessions.md) | every Tron session across all models: the evidence for what each model is good for |
 | [bonsai.md](bonsai.md) | Bonsai: model format, VRAM budget, KV cache, reasoning, Swift-Bonsai-2, sampling, vision, Vulkan |
 | [qwen36.md](qwen36.md) | Qwen3.6-35B-A3B: why a MoE, the offload/MTP grid, profiles, RX 570, native Linux, the Unsloth tree, vision |
@@ -17,6 +18,25 @@ on 2026-10-03, T-047):
 | [performance.md](performance.md) | Bonsai's bandwidth roofline, the optimizations tried and rejected; Qwen3.8-Flash's CPU experts |
 | [bench.md](bench.md) | bench results by question, with run ids: the campaign's tier tables |
 | [../bench/README.md](../bench/README.md) | the agent bench: task kinds and layout, generated tasks, attempts and verdicts, configurations and the fit check, runs, budgets, result reuse |
+
+## New architectures
+
+A model no shipped tree runs gets its own `models/NAME.env` (the tree: `LLAMA_REPO`, `LLAMA_COMMIT`,
+`LLAMA_DIR`, `PATCH_DIR`, mainline by default), a configuration in `configs/`, and no installer
+entry: `MODEL_SUPPORT` defaults to `unsupported`, so `install.sh` and preflight leave it out, and
+`las list` marks it. The procedure is the `bench-add-model` skill's.
+
+**The chat template.** The GGUF's own template is the default. `las check CONFIG` sends a request
+with one tool and checks for a well-formed `tool_calls` entry, then sends the result back and checks
+that a final answer comes; it exits 1 naming the step (request, tool_calls, arguments, result,
+answer). When it fails on `tool_calls` or `arguments` and the template is the cause, a corrected
+template goes in `templates/` and the model file names it with `CHAT_TEMPLATE=templates/FILE.jinja`.
+`server-flags.sh` passes it as `--chat-template-file`, and its bytes are part of the bench's fit and
+setup keys, so a changed template measures again. The model file's comment says why the template is
+there.
+
+Support is earned by a bench run: a model measured with results in [bench.md](bench.md) can be set
+to `supported`, which puts it in the installer's RAM list.
 
 ## Old anchors
 

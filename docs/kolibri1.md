@@ -1,6 +1,8 @@
 # Kolibri-1, 78B
 
-`MODEL=kolibri1`, or the `kolibri-server`, `kolibri-pi` and `kolibri-studio` commands, serve
+**Unsupported until benched:** it runs and benches like any model, but `install.sh` does not offer it and preflight does not recommend it (`MODEL_SUPPORT=unsupported`).
+
+`MODEL=kolibri1` (configurations `kolibri1` and `kolibri1-display`) serves
 [Kolibri-1](https://huggingface.co/Aleph-Alpha/Kolibri-1), Aleph Alpha's reasoning MoE for German
 and English (Apache-2.0): 78B, 384 experts of which 6 are active plus one shared expert, 3.5B
 parameters per token, 50 layers. Every routed expert stays in RAM, so like Qwen3.8-Flash it needs a
@@ -45,7 +47,7 @@ but the API with 404. b11381 is the UI released with this commit.
 | `CPU_MOE` 50 | every routed expert in RAM; the card holds 1.6 GiB of weights plus the cache |
 | `KV_K`/`KV_V` `q8_0` | as for both Qwen models; KV quality is not measured for this model |
 | `EFFORT` medium | the template reads `reasoning_effort` (`none`, `low`, `medium`, `high`, its default); medium as for Bonsai and Qwen3.8-Flash |
-| sampling 1.0 / 0.97 / 128 | temperature, top-p and top-k from the model card, which the patch was tested with. `kolibri-studio` passes top-k 100, the most Unsloth Studio accepts; at top-p 0.97 ranks past 100 carry almost no mass |
+| sampling 1.0 / 0.97 / 128 | temperature, top-p and top-k from the model card, which the patch was tested with. the studio engine passes top-k 100, the most Unsloth Studio accepts; at top-p 0.97 ranks past 100 carry almost no mass |
 | no speculative decoding | no MTP head, and no small model shares its 128k tokenizer |
 
 ## Window and profiles

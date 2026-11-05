@@ -1,11 +1,11 @@
 # Qwen3.8-Flash-Next, 125B
 
-`MODEL=qwen38-flash` serves [Qwen3.8-Flash-Next](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF),
+`MODEL=qwen38-flash` (supported) serves [Qwen3.8-Flash-Next](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF),
 the architecture mainline calls `qwen4exp`: 125B, 512 experts of which 10 are active, 48 layers
 (36 Gated DeltaNet, 12 sparse attention with a lightning indexer). The strongest of the
 three models, for a 64 GB machine; not the default, because at ~19 tok/s natively it is under half
 of Qwen3.6's speed and needs a machine few have. Tested like the others since T-049 and T-043
-(2026-10-03/04): speed, its window filled to the edge, VRAM under `qwen-studio`, and three agent
+(2026-10-03/04): speed, its window filled to the edge, VRAM under Unsloth Studio, and three agent
 sessions, the first of which built the only game of its day whose rematch works
 ([agent-sessions.md](agent-sessions.md#d-qwen38-flash)).
 
@@ -58,7 +58,7 @@ three 256-token turns at 18.1-18.9 tok/s against 17.8-18.5, the 5k prompt warm a
 **The window.** The indexer's compute buffer is ~13 B x context x ubatch, and that, not the KV
 cache, bounds it. 131k at `q8_0`/`q8_0` and ub 512 is 7 386 MiB. 262k fits with `q4_0`/`q4_0` and ub
 256 (7.56 GB, the same tg, prompts at ~29 tok/s): `CTX=262144 KV_K=q4_0 KV_V=q4_0 UB=256
-qwen-server`. KV quality at `q4_0` is not measured for this model.
+las serve qwen38-flash`. KV quality at `q4_0` is not measured for this model.
 
 **Filled, it needs CCCL 3.2** (T-049, 2026-10-03, `runs/T-049-flash-deep/`). Built against
 CUDA 12.9 alone, the server died in both T-046 sessions at ~48k of context, and on a fresh
@@ -79,7 +79,7 @@ it, and would cut the toolkits from apt that the build accepts today. Rebuilt th
 `install.sh build` with the setting, the installed binary gave the same: 110k at 97.4 tok/s, 10.0
 tok/s after it, VRAM flat at 7 594 MiB.
 
-**Measured through `qwen-server`** (T-039, 2026-09-29, prebuilt b11160, `dedicated`, 50 GB WSL2;
+**Measured through the llama engine** (T-039, 2026-09-29, prebuilt b11160, `dedicated`, 50 GB WSL2;
 native Linux in [its own section](#native-linux-every-expert-cached)):
 
 | Threads | tg, 256-token turns (2 x 3) | pp, 5 064-token prompt | a chat turn with thinking |
@@ -234,7 +234,7 @@ for 2.8 GB of experts. Too short to compare, and with the tail skip on not the s
 This repo on the same file and card: 19.0-19.6 tok/s on 256-token turns, exact top-10 routing, at
 131k, 14.3 at 110k of depth.
 
-**As a bench server** (`bench/configs/qwen38-flash-strata-{dflash2,mtp}.env`,
+**As a bench server** (`configs/qwen38-flash-strata-{dflash2,mtp}.env`,
 `bench/README.md#strata`): Strata 0.2.10, engine 0.1.56, on two presets `strata launch --tune quick`
 wrote on 2026-11-03 (int8 KV, 32k KV resident, 35 GiB resident, 131k), every approximation off. They
 differ in the drafter: `dflash2` DFlash2 alone (no MTP layer, windows up to 8 tokens; set as

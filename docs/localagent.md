@@ -1,14 +1,18 @@
 # The localagent workflow
 
-**Not recommended. Use `qwen-pi` without the flag.** On this model the workflow has finished
+> **Frozen record.** The code this file describes is not in this repo any more; paths and
+> commands below (`qwen-pi`, `pi/`, `install.sh pi`, `QWEN_HOME`) are those of the time and name
+> nothing that exists. Like [model-comparison.md](model-comparison.md) it is a record of finished
+> work: new measurements go to the file that holds the topic.
+
+**Not recommended.** On this model the workflow has finished
 only a toy task, and there it was no faster than the model working alone. On the one real task
-measured it failed where the model alone succeeded. It is frozen since 2026-09-23 and stays in the
-repo unchanged, for a stronger local model. [Status](#status) has the numbers.
+measured it failed where the model alone succeeded. It was frozen on 2026-09-23.
+[Status](#status) has the numbers.
 
 A multi-agent build pipeline for a weak local model: plan gate, then one worker dispatch per
-small unit (spec -> tests -> code -> test run), then e2e and docs. It lives in
-[`pi/localagent-workflow/`](../pi/localagent-workflow/) and runs as `qwen-pi --localagent`
-through the extension in [`pi/extensions/localagent/`](../pi/extensions/localagent/).
+small unit (spec -> tests -> code -> test run), then e2e and docs. It ran as `qwen-pi --localagent`
+on pi, through a `dispatch` extension and a skill with five agent prompts.
 
 The idea was context discipline, not throughput. A 27B model holds a feature badly and forgets
 what it decided three turns ago, so the pipeline gives every step a tiny single-purpose context and

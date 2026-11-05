@@ -12,7 +12,7 @@ native Linux since 2026-09-29.
 - **`CMAKE_CUDA_ARCHITECTURES`** comes from `nvidia-smi` (`89` for Ada). Compiling for one architecture is much faster than for the default set.
 - **No CCCL fetch since T-053.** Unsloth's b11160 pin needed `GGML_CUDA_CUB_3DOT2=ON` (CCCL v3.2.0 from GitHub at configure time), or Qwen3.8-Flash's top-k ran the CUDA pool out of the card at 19-48k (T-049). The b11681 pin has its own radix top-k and fills 110k flat on the toolkit's CCCL ([qwen38-flash.md](qwen38-flash.md)).
 - **ccache** speeds up rebuilds and is used when present; the build works without it.
-- OpenSSL is not needed: it only enables HTTPS model downloads inside llama-server, and `qwen-server` passes a local path.
+- OpenSSL is not needed: it only enables HTTPS model downloads inside llama-server, and `las serve` passes a local path.
 - **Vulkan** (`BACKEND=vulkan`): `GGML_VULKAN=ON` and the patches from `patches/vulkan/` applied to
   the clean checkout, nothing else. There is no architecture to pick; the shaders are compiled by
   `glslc` at build time (`vulkan-shaders-gen`) and the driver specialises them. The Vulkan flash
@@ -56,14 +56,13 @@ T-005, T-006):
   ROCm/HIP and Metal kernels; untested. [Other GPU backends](bonsai.md#other-gpu-backends) has what
   Vulkan delivers and why.
 
-**Node.js >= 22.19** for pi (`engines` in its `package.json`) comes from apt on Ubuntu 26.04 only:
-24.04 ships 18.19, Debian 13 20.19. nvm is the tested source (v24.21 on Mint 22.3); it reaches
-only shells that read `~/.bashrc`, so a distro Node left in `/usr/bin` still wins elsewhere, and
-preflight says which one it found. NodeSource works the same way through apt. pi takes 440 MB in
-`$QWEN_HOME/pi`.
+**Node.js >= 22.19** is pi's requirement (`engines` in its `package.json`). Nothing here installs
+pi on the host: the bench's image carries its own at `PI_VERSION`, so Node matters only to run a
+pi of yours against `las harness pi`. It comes from apt on Ubuntu 26.04 only: 24.04 ships 18.19,
+Debian 13 20.19. nvm is the tested source (v24.21 on Mint 22.3); it reaches only shells that read
+`~/.bashrc`, so a distro Node left in `/usr/bin` still wins elsewhere.
 
-Disk, measured: model 5.6 GB, `llama.cpp` checkout and build 1.3-1.9 GB, ccache ~0.25 GB, pi
-0.44 GB. The toolkit: ~5.4 GB from apt, 7.3 GB for NVIDIA's `cuda-toolkit-12-9`, whose Nsight
+Disk, measured: model 5.6 GB, `llama.cpp` checkout and build 1.3-1.9 GB, ccache ~0.25 GB. The toolkit: ~5.4 GB from apt, 7.3 GB for NVIDIA's `cuda-toolkit-12-9`, whose Nsight
 tools also pull a Java runtime. The binary links `libcudart` and `libcublas` dynamically, so the
 toolkit stays after the build. A fresh native install came to ~15 GB with NVIDIA's toolkit.
 
@@ -143,11 +142,10 @@ to be rewritten are the parts that are hard:
   branch, and the ccache launchers with it, mean something else.
 - **`model` symlinks out of the Hugging Face cache**, which needs developer mode or an
   administrator.
-- **`qwen-pi` is the real cost.** `setsid`, `flock`, `kill -0`, pruning sessions by pid, and the
-  HUP/TERM/QUIT traps that make [Server lifecycle](agent.md#server-lifecycle) work have no Windows
-  counterpart. It would be reinvented with job objects and a mutex - the one piece of this repo
-  where the failure modes were expensive to find, rebuilt on a platform where they would have to be
-  found again.
+- **The bench's server handling is the real cost.** `start_new_session` and the signal handling
+  that make [Server lifecycle](agent.md#server-lifecycle) work have no Windows counterpart. It would
+  be reinvented with job objects - the one piece of this repo where the failure modes were
+  expensive to find, rebuilt on a platform where they would have to be found again.
 
 Git Bash or MSYS2 is not the shortcut it looks like: `nvidia-smi` and cmake run there, `/proc`,
 `flock` and `setsid` do not.
@@ -227,8 +225,7 @@ It checks the distro (a derivative by its base, from `ID_LIKE` and `UBUNTU_CODEN
 against what the named steps will actually write (a model in the Hugging Face cache costs
 nothing, and of a split GGUF only the missing parts count), `MemAvailable`, the driver for `BACKEND` (on native Linux, a module that Secure Boot
 kept out), the CUDA toolchain the run will use (the installed `nvcc`, or the version apt would
-install), `cmake` and `git` for a build without `deps`, total and used VRAM, Node for the `pi`
-step (and whether nvm has a newer one off the `PATH`), and whether something is already answering
+install), `cmake` and `git` for a build without `deps`, total and used VRAM, and whether something is already answering
 on `PORT`. Three properties matter:
 
 - **It reports every item and exits once.** A list of five problems takes one pass to fix; five
@@ -237,7 +234,7 @@ on `PORT`. Three properties matter:
   how a server on another machine gets set up, so the driver checks are skipped there.
 - **Warnings do not stop it.** Low RAM, an unmeasured distro, a busy port: these are things to
   know, not things to block on. Only a missing driver, too little disk, a CUDA older than 12.4, a
-  missing build tool, a card below 8 GB or a Node too old for pi are hard failures.
+  missing build tool, or a card below 8 GB are hard failures.
 
 `SKIP_PREFLIGHT=1` bypasses it. The failure message says so, because the checks encode what was
 true on three machines and should not be the thing that stops a fourth.
@@ -245,44 +242,52 @@ true on three machines and should not be the thing that stops a fourth.
 It also says which models the machine's RAM runs and which one it recommends: `MemTotal` against
 each model file's `MODEL_RAM_MB` plus ~2 GB, the same gate the selected model is held to, and
 Qwen3.6 as the recommendation wherever it fits (Qwen3.8-Flash is never recommended, only chosen).
-Before preflight, a first `./install.sh` without `MODEL` shows the same list as a numbered question;
-without a terminal it takes the recommendation. The answer is recorded in `$QWEN_HOME/model.env`
+Only models with `MODEL_SUPPORT=supported` are listed; an unsupported one still installs when its
+configuration is named (`CONFIG=bonsai ./install.sh`).
+Before preflight, a first `./install.sh` without `CONFIG` shows the same list as a numbered question;
+without a terminal it takes the recommendation. The answer is recorded in `$LAS_HOME/default.env`
 only once preflight has passed, so a model the machine cannot hold never sticks
-([README](../README.md#install-in-detail)). An install from before the rename (in `bonsai-local`,
-with a `pi-agent/` and no `model.env`) keeps Bonsai, which it ran until then. Both
-read the model files with `model_var` in `scripts/lib.sh`, so a new model file joins the list by
-its `MODEL_RAM_MB`, `MODEL_TITLE` and `MODEL_ROLE`.
+([README](../README.md#install-in-detail)). Both
+read the model files with `model_var` in `scripts/lib.sh`, so a new supported model file joins the
+list by its `MODEL_RAM_MB`, `MODEL_TITLE` and `MODEL_ROLE`.
 
 VRAM in use above 400 MiB is a warning rather than a failure: it usually means a desktop is on the
-card, which is what `PROFILE=display` is for, but it can equally be another model server that will
+card, which is what the `-display` configurations are for, but it can equally be another model server that will
 be gone by the time this one starts. See [VRAM budget](bonsai.md#vram-budget).
 
 ## Troubleshooting
 
 | Symptom | Cause · fix |
 | --- | --- |
-| `invalid ggml type 143` | Stock llama.cpp is running. Start through `qwen-server`. |
+| `invalid ggml type 143` | Stock llama.cpp is running. Start through `las serve`. |
 | Generation slows sharply as context grows, GPU load low | Mixed K/V cache types on a build without `FA_ALL_QUANTS`: `FORCE=1 ./install.sh build` |
 | `offloaded N/65 layers` with N < 65 | `--fit` is active or VRAM is taken. Check `nvidia-smi` and move the display to the iGPU. |
 | Slower while a browser is visible | The browser renders on the RTX. Switch it to the iGPU in Windows graphics settings. |
 | `sudo: a terminal is required` | Run `./install.sh deps` in a real terminal, not through an agent's shell. |
 | `pi -p` hangs in scripts | pi waits on stdin without a TTY: add `< /dev/null`. |
-| `pi` talks to another model, or ignores the budget | Plain `pi` is your global instance. Start `qwen-pi`. |
-| `qwen-server exited during start` | Read `$QWEN_HOME/server.log`; usually VRAM taken by another process, see `nvidia-smi`. |
-| `no qwen-server with model ... on port` | Something else listens on `PORT`. Stop it or set another `PORT`, then `./install.sh pi`. |
+| `pi` talks to another model, or ignores the budget | It reads your global config. Point it at the written one: `PI_CODING_AGENT_DIR=... pi` (`las harness pi CONFIG` prints it). |
+| `las serve` exits during start | The engine's message is on the terminal; usually VRAM taken by another process, see `nvidia-smi`. |
+| `las check` or a harness reaches the wrong server | Something else listens on `PORT`. Stop it or set another `PORT`, then `las harness` again. |
 | Answer ends after exactly `MAX_TOKENS` | The output cap was hit. Raise `MAX_TOKENS` or lower `BUDGET`. |
 | `stopReason: length` well below `MAX_TOKENS`, near a compaction | pi's output clamp: `BUDGET` too large for `RESERVE_TOKENS - 4096`. See [Context budget](agent.md#context-budget). |
-| pi compacts every turn, most of the time goes into summarizing | `RESERVE_TOKENS`/`KEEP_RECENT_TOKENS` are unset or too large for `CTX`: `./install.sh pi`. See [Context budget](agent.md#context-budget). |
+| pi compacts every turn, most of the time goes into summarizing | `RESERVE_TOKENS`/`KEEP_RECENT_TOKENS` are unset or too large for `CTX`: `las harness pi CONFIG`. See [Context budget](agent.md#context-budget). |
 | Vulkan: ~1.2x below the numbers here, GTT above 400 MiB at 16k | Mesa < 25.2: `RADV_PERFTEST=nogttspill` is ignored. `deps` warns; take `mesa-vulkan-drivers` from backports. See [Other GPU backends](bonsai.md#other-gpu-backends). |
-| Vulkan, Qwen: the first request fast, every later one on the same cache ~2x slower, GTT grows | `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM` is unset, e.g. a server started by hand rather than through `qwen-server`. See [qwen36.md](qwen36.md#on-the-rx-570-vulkan). |
+| Vulkan, Qwen: the first request fast, every later one on the same cache ~2x slower, GTT grows | `GGML_VK_DISABLE_HOST_VISIBLE_VIDMEM` is unset, e.g. a server started by hand rather than through `las serve`. See [qwen36.md](qwen36.md#on-the-rx-570-vulkan). |
 | Vulkan: VRAM reads a few MiB right after load | Normal. RADV moves the weights into VRAM on the first request. Judge by tok/s, and read VRAM and GTT together. |
 | Vulkan: ~2x slower, VRAM ~20 MiB, GTT ~6 GB | `GGML_VK_PREFER_HOST_MEMORY` is set. It is checked for presence, so `=0` also turns it on: unset it. |
 | `vulkaninfo` lists no device, `deps` dies on it | Your user is not in the `render` group: `usermod -aG render $USER`, log in again. |
 | `nvidia-smi` "couldn't communicate with the NVIDIA driver", native Linux | Secure Boot refused the module: its key is not enrolled. See [Secure Boot](#secure-boot). |
 | `apt offers CUDA 12.0 here` from `deps` or preflight | Ubuntu 24.04 or a derivative. Install [CUDA from NVIDIA's repository](#cuda-from-nvidias-repository), then `./install.sh`. |
 | `cmake: command not found` in `build` | `deps` was skipped. Run it, or install `cmake` yourself; preflight now says so first. |
-| `node: v18... - nvm has v24...` | nvm is loaded by `~/.bashrc` only. Run from an interactive shell, or `source ~/.nvm/nvm.sh`. |
 | `preflight: N problem(s)` | Each line above it says what and how. `SKIP_PREFLIGHT=1 ./install.sh` goes ahead anyway. |
-| `preflight` warns that VRAM is already in use | A desktop or another server is on the card. `PROFILE=display`, or free it. See [VRAM budget](bonsai.md#vram-budget). |
+| `preflight` warns that VRAM is already in use | A desktop or another server is on the card. Use the `-display` configuration, or free it. See [VRAM budget](bonsai.md#vram-budget). |
 | `download failed` from `model` | Run `./install.sh model` again; `curl -C -` resumes from the `.part` file. |
 | `patch does not apply` from `build` | `LLAMA_COMMIT` moved and `patches/$BACKEND/` was not rebased. Rebase it, or check whether the pin already carries the change and delete the patch. |
+
+## Moving an existing data dir
+
+Everything the install writes lives in `LAS_HOME`, default `~/.local/share/local-agent-suite`. A
+data dir that sits elsewhere (for example `~/models/bonsai-local`) either moves there with `mv`,
+or stays and is named in the environment, `export LAS_HOME=<dir>`, for `las`, the install steps and
+`bench/run.py` alike. Nothing reads another name, and no `model.env` is read: write
+`$LAS_HOME/default.env` (`CONFIG=<name>`) or set `CONFIG`.
