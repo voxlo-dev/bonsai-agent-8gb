@@ -24,13 +24,14 @@ measured.
   Experts 352 MiB per MoE layer (13.1 GiB in all), everything else 807 MiB.
 - **Sampling:** the card's: temperature 0.1, top-k 50, repetition penalty 1.05 (`SERVER_ARGS`), no
   top-p. The template has no `reasoning_effort`, so `EFFORT` is empty.
-- **KV:** q8_0/q8_0 as for the Qwen models, not measured against f16 for this cache. With 10
-  attention layers it stays small at the full window.
+- **KV:** q8_0/q8_0 as for the Qwen models, not measured against f16 for this cache. f16 fits
+  the full window too, at two expert layers fewer on the card and 5-8 % less decode
+  ([bench.md](bench.md#lfm25-24b-optimized)).
 
 ## Window
 
-`configs/lfm25-24b.env`: 131k, the experts of 27 of 38 MoE layers in RAM (`CPU_MOE=29`), ubatch
-2048, Qwen3.6's budget. At `CPU_MOE=26` the compute buffer (834 MiB at ubatch 2048) did not fit.
-Fit at 29 (2026-11-05): 98 304 tokens in 67 s, 589 MiB free afterwards, so one more expert layer
-on the card (`CPU_MOE=28`) is within the 200 MiB margin by arithmetic - stage 2's to measure, with
-its speed. Logs: `runs/T-079-lfm25/`.
+`configs/lfm25-24b.env`: 131k, the experts of 25 of 38 MoE layers in RAM (`CPU_MOE=27`), ubatch
+1024, Qwen3.6's budget. Tuned by `bench-optimize` to stage 2 (2026-11-05): the halved ubatch's
+compute buffer pays for two expert layers on the card, the fastest decode measured at every depth
+for 35-40 % less prompt speed. Fit: 98 304 tokens in 104 s, 376 MiB free. The sweep, its fits and
+the speeds: [bench.md](bench.md#lfm25-24b-optimized). Logs: `runs/T-081-lfm25-opt/`.
