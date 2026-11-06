@@ -30,11 +30,16 @@ display on the card ([docs/bench.md](docs/bench.md), tier 1, one repeat each):
 | **32 GB** | [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B) UD-Q4_K_XL (`qwen36-35b`) | llama.cpp | 51 · 50 | 131k | 12/14 · 35/38 |
 | **64 GB** | [Qwen3.8-Flash-Next](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF) 125B, ISTA-DASLab's [GSQ-RCO IQ3_XXS](docs/bench.md#qwen38-flash-gsq-rco-iq3_xxs-optimized) (`qwen38-flash-gsq-iq3xxs-strata`) | Strata | 42 · 38 | 262k | 13/14 · 33/36 |
 
-**When quality counts more than speed**, at 64 GB: Qwen3.8-Flash on UD-IQ4_XS
-(`qwen38-flash-strata-dflash2`, Strata, 30 · 26 tok/s, 131k, 14/14 · 35/39). It also runs without
-Strata, on this repo's llama.cpp (`qwen38-flash`, ~19 tok/s, not benched in tier 1).
+**When quality counts more than speed**:
 
-`./install.sh` reads your RAM, offers these five and recommends the largest step that fits; the
+- **32 GB, agent work:** [Flint](https://huggingface.co/RecursiveSI/flint) 40B-A2.5B UD-Q4_K_XL
+  (`flint`, llama.cpp, 51 · 36 tok/s, 131k, [14/14 · 23/36](docs/bench.md#flint-in-tier-2)): every
+  agent task at Qwen3.6's speed, but weak at chat, worst in German - not a multilingual chat assistant.
+- **64 GB:** Qwen3.8-Flash on UD-IQ4_XS (`qwen38-flash-strata-dflash2`, Strata, 30 · 26 tok/s, 131k,
+  14/14 · 35/39). It also runs without Strata, on this repo's llama.cpp (`qwen38-flash`, ~19 tok/s,
+  not benched in tier 1).
+
+`./install.sh` reads your RAM, offers these six and recommends the largest step that fits; the
 two Strata configurations need [Strata](#strata) first. Other models run and bench like any
 configuration but are not offered until a bench run has measured them: Ternary-Bonsai-2-27B
 ([details](docs/bonsai.md)) and Kolibri-1 ([details](docs/kolibri1.md)). A new model or
