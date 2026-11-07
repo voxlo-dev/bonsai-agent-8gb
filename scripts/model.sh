@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
-# Puts the pinned GGUF at MODEL_PATH, and with VISION=1 its projector at MMPROJ_PATH: links each
-# file from the Hugging Face cache when present, downloads it otherwise, and checks it against its pin.
+# Puts the pinned GGUF at MODEL_PATH, a separate drafter at DRAFT_PATH, and with VISION=1 its
+# projector at MMPROJ_PATH: links each file from the Hugging Face cache when present, downloads it
+# otherwise, and checks it against its pin.
 # A split GGUF (MODEL_FILE ending in -00001-of-0000N.gguf) is handled part by part, with one
 # MODEL_SHA256 entry per part in order; llama.cpp finds the other parts next to the first.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -44,6 +45,11 @@ for n in "${!parts[@]}"; do
   fetch "${parts[$n]}" "$dir/$(basename "${parts[$n]}")" "${sums[$n]}" $((MODEL_DISK_MB / ${#parts[@]})) "$label"
 done
 log "model ready at $MODEL_PATH"
+
+if [[ -n "${DRAFT_FILE:-}" ]]; then
+  fetch "$DRAFT_FILE" "$DRAFT_PATH" "$DRAFT_SHA256" "$DRAFT_DISK_MB" " (drafter)"
+  log "drafter ready at $DRAFT_PATH"
+fi
 
 if [[ "$VISION" == 1 ]]; then
   fetch "$MMPROJ_FILE" "$MMPROJ_PATH" "$MMPROJ_SHA256" "$MMPROJ_DISK_MB" " (vision projector)"
