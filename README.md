@@ -35,11 +35,16 @@ display on the card ([docs/bench.md](docs/bench.md), tier 1, one repeat each):
 - **32 GB, agent work:** [Flint](https://huggingface.co/RecursiveSI/flint) 40B-A2.5B UD-Q4_K_XL
   (`flint`, llama.cpp, 51 · 36 tok/s, 131k, [14/14 · 23/36](docs/bench.md#flint-in-tier-2)): every
   agent task at Qwen3.6's speed, but weak at chat, worst in German - not a multilingual chat assistant.
+- **32 GB, lean agent:** [Ornith-1.5-35B-A3B](https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B)
+  Q4_K_M (`ornith-35b`, llama.cpp, 56 · 48 tok/s, 131k, [13/14 · 26/36](docs/bench.md#ornith-15-35b-in-tier-2)):
+  a Qwen3.6 fine-tune that passes one agent task more with a third less thinking, and the only
+  model here to pass the hallucination tasks; the weaker chat assistant, in German especially.
+  Qwen3.6 or Ornith is a matter of taste.
 - **64 GB:** Qwen3.8-Flash on UD-IQ4_XS (`qwen38-flash-strata-dflash2`, Strata, 30 · 26 tok/s, 131k,
   14/14 · 35/39). It also runs without Strata, on this repo's llama.cpp (`qwen38-flash`, ~19 tok/s,
   not benched in tier 1).
 
-`./install.sh` reads your RAM, offers these six and recommends the largest step that fits; the
+`./install.sh` reads your RAM, offers these seven and recommends the largest step that fits; the
 two Strata configurations need [Strata](#strata) first. Other models run and bench like any
 configuration but are not offered until a bench run has measured them: Ternary-Bonsai-2-27B
 ([details](docs/bonsai.md)) and Kolibri-1 ([details](docs/kolibri1.md)). A new model or
