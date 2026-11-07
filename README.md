@@ -22,10 +22,11 @@ setup.
 Mixture-of-experts models only use a few billion parameters per token, so their experts can live
 in system RAM while the card holds the rest. More RAM, a bigger model. Each step below is a
 configuration the bench measured on an RTX 4060 Ti 8 GB with a Ryzen 7 7800X3D, native Linux, no
-display on the card ([docs/bench.md](docs/bench.md), tier 1, one repeat each):
+display on the card ([docs/bench.md](docs/bench.md), one repeat each):
 
 | RAM next to the card | Configuration | Engine | tok/s at 512 · 64k | Window | Agent · chat tasks |
 | --- | --- | --- | --- | --- | --- |
+| **any** | [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) PTQ1_0 (`bonsai`), dense, all on the card | llama.cpp (PrismML's fork) | 39 · 27 at 48k | 64k | 13/14 · 31/36 |
 | **16 GB** | [LFM2.5-24B-A2B](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B) UD-Q4_K_XL (`lfm25-24b`) | llama.cpp | 62 · 49 | 131k | 9/14 · 32/36 |
 | **32 GB** | [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B) UD-Q4_K_XL (`qwen36-35b`) | llama.cpp | 51 · 50 | 131k | 12/14 · 35/38 |
 | **64 GB** | [Qwen3.8-Flash-Next](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF) 125B, ISTA-DASLab's [GSQ-RCO IQ3_XXS](docs/bench.md#qwen38-flash-gsq-rco-iq3_xxs-optimized) (`qwen38-flash-gsq-iq3xxs-strata`) | Strata | 42 · 38 | 262k | 13/14 · 33/36 |
@@ -44,10 +45,10 @@ display on the card ([docs/bench.md](docs/bench.md), tier 1, one repeat each):
   14/14 · 35/39). It also runs without Strata, on this repo's llama.cpp (`qwen38-flash`, ~19 tok/s,
   not benched in tier 1).
 
-`./install.sh` reads your RAM, offers these seven and recommends the largest step that fits; the
+`./install.sh` reads your RAM, offers these eight and recommends the largest step that fits; the
 two Strata configurations need [Strata](#strata) first. Other models run and bench like any
-configuration but are not offered until a bench run has measured them: Ternary-Bonsai-2-27B
-([details](docs/bonsai.md)) and Kolibri-1 ([details](docs/kolibri1.md)). A new model or
+configuration but are not offered until a bench run has measured them, such as
+Kolibri-1 ([details](docs/kolibri1.md)). A new model or
 architecture: the [`bench-add-model` skill](.agents/skills/bench-add-model/SKILL.md) and
 [docs/dev.md](docs/dev.md).
 

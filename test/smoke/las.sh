@@ -27,7 +27,7 @@ for f in "$ROOT"/configs/*.env; do
   grep -q "^$n " <<<"$out" || fail "list does not name $n"
 done
 grep -Eq '^qwen36-35b +qwen36-35b +llama +[0-9]+k +supported$' <<<"$out" || fail "list row of qwen36-35b is wrong"
-grep -Eq '^bonsai +bonsai +llama +[0-9]+k +unsupported$' <<<"$out" || fail "list does not mark bonsai unsupported"
+grep -Eq '^gemma4-26b +gemma4-26b +llama +[0-9]+k +unsupported$' <<<"$out" || fail "list does not mark gemma4-26b unsupported"
 
 # llama: the window, the server's address and alias, the model under LAS_HOME.
 ctx="$(setting qwen36-35b CTX)"
@@ -53,7 +53,7 @@ out="$(CHAT_TEMPLATE=models/qwen36-35b.env "$las" serve --print qwen36-35b)" || 
 # The ramp: one recommendation per RAM step, RAMP_ALSO offered but never recommended.
 ramp="$(bash -c 'source "$1/scripts/lib.sh"; for t in 15700 31000 63000; do recommended_config $t; done' _ "$ROOT" | tr '\n' ' ')"
 [[ "$ramp" == "lfm25-24b qwen36-35b qwen38-flash-gsq-iq3xxs-strata " ]] || fail "ramp recommends: $ramp"
-[[ "$(bash -c 'source "$1/scripts/lib.sh"; ramp_configs | wc -l' _ "$ROOT")" == 7 ]] || fail "the ramp does not list seven configurations"
+[[ "$(bash -c 'source "$1/scripts/lib.sh"; ramp_configs | wc -l' _ "$ROOT")" == 8 ]] || fail "the ramp does not list eight configurations"
 
 # Studio: the same flags through Unsloth Studio, the window as its own option.
 out="$(ENGINE=studio "$las" serve --print qwen36-35b)" || fail "serve --print with ENGINE=studio failed"
