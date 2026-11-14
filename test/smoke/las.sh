@@ -57,7 +57,9 @@ out="$(CHAT_TEMPLATE=models/qwen36-35b.env "$las" serve --print qwen36-35b)" || 
 # The ramp: one recommendation per RAM step, RAMP_ALSO offered but never recommended.
 ramp="$(bash -c 'source "$1/scripts/lib.sh"; for t in 15700 31000 63000; do recommended_config $t; done' _ "$ROOT" | tr '\n' ' ')"
 [[ "$ramp" == "lfm25-24b qwen36-35b qwen38-flash-gsq-iq3xxs-strata " ]] || fail "ramp recommends: $ramp"
-[[ "$(bash -c 'source "$1/scripts/lib.sh"; ramp_configs | wc -l' _ "$ROOT")" == 8 ]] || fail "the ramp does not list eight configurations"
+n="$(bash -c 'source "$1/scripts/lib.sh"; echo $RAMP $RAMP_ALSO | wc -w' _ "$ROOT")"
+[[ "$(bash -c 'source "$1/scripts/lib.sh"; ramp_configs | wc -l' _ "$ROOT")" == "$n" ]] \
+  || fail "the ramp does not list all $n configurations of RAMP and RAMP_ALSO"
 
 # Studio: the same flags through Unsloth Studio, the window as its own option.
 out="$(ENGINE=studio "$las" serve --print qwen36-35b)" || fail "serve --print with ENGINE=studio failed"
