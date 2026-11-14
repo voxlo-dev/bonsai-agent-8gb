@@ -74,14 +74,14 @@ you checked.
 ## The bench
 
 The bench measures local models on tasks with a hidden checker, and it lives with its results in
-the maintainer's private fork, not here. Pull requests adding tasks will be declined: a task that
+the maintainer's private repository, not here. Pull requests adding tasks will be declined: a task that
 is published can be crawled into the next model's training data, and from then on the bench
 measures memory, not ability. The same goes for re-building a public benchmark - its tasks are
 already out there. Tasks are the author's own or generated: Claude writes a generator per task
 family, a script draws the concrete instance from true randomness, and nobody reads it.
 
-This repo is the fork's upstream: everything but the bench is developed here and merged into the
-fork, and a number in `docs/` names the private run that measured it.
+That repository also holds more models than this one, which is its selection for 8 GB cards; a
+number in `docs/` names the private run that measured it.
 
 ## What will probably be declined
 
