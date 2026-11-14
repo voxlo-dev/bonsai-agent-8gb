@@ -27,7 +27,11 @@ for f in "$ROOT"/configs/*.env; do
   grep -q "^$n " <<<"$out" || fail "list does not name $n"
 done
 grep -Eq '^qwen36-35b +qwen36-35b +llama +[0-9]+k +supported$' <<<"$out" || fail "list row of qwen36-35b is wrong"
-grep -Eq '^gemma4-26b +gemma4-26b +llama +[0-9]+k +unsupported$' <<<"$out" || fail "list does not mark gemma4-26b unsupported"
+for f in $(grep -l '^MODEL_SUPPORT=unsupported' "$ROOT"/models/*.env); do
+  m="$(basename "$f" .env)"
+  awk -v m="$m" '$2 == m && $NF != "unsupported" { bad = 1 } END { exit bad }' <<<"$out" \
+    || fail "list does not mark the configurations of $m unsupported"
+done
 
 # llama: the window, the server's address and alias, the model under LAS_HOME.
 ctx="$(setting qwen36-35b CTX)"

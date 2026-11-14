@@ -167,8 +167,8 @@ serve_studio() {
     *) die "SPEC_TYPE=$SPEC_TYPE has no Unsloth Studio equivalent here (draft-mtp or none)" ;;
   esac
 
-  # Studio refuses a top-k above 100; Kolibri-1's card asks for 128. Clamped, since its top-p of
-  # 0.97 leaves ranks past 100 almost no mass (docs/kolibri1.md#settings).
+  # Studio refuses a top-k above 100, which a model card may ask for (Kolibri-1's: 128). Clamped,
+  # since a top-p like its 0.97 leaves ranks past 100 almost no mass.
   local top_k="$SAMPLING_TOP_K"
   ((top_k <= 100)) || top_k=100
 
