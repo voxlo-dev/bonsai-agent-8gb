@@ -17,7 +17,6 @@ body:
         - install.sh link
         - las serve (starting or running)
         - las check or las harness
-        - the bench (bench/run.py)
         - something else
     validations:
       required: true

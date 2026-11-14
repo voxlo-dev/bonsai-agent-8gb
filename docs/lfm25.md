@@ -1,7 +1,7 @@
 # LFM2.5-24B-A2B
 
 **Supported, the ramp's 16 GB step** ([README](../README.md#which-model)): tuned by `bench-optimize`
-to stage 2 and benched in tier 1 ([bench.md](bench.md#lfm25-24b-in-tier-1)), replacing Bonsai.
+to stage 2 and benched in tier 1 (`bench.md#lfm25-24b-in-tier-1`), replacing Bonsai.
 
 Liquid AI's reasoning MoE: architecture `lfm2moe`, 40 layers of which 10 attention and the rest
 short convolutions, layers 0-1 dense, 64 experts with 4 active (2B parameters per token), a 131k
@@ -25,7 +25,7 @@ measured.
   top-p. The template has no `reasoning_effort`, so `EFFORT` is empty.
 - **KV:** q8_0/q8_0 as for the Qwen models, not measured against f16 for this cache. f16 fits
   the full window too, at two expert layers fewer on the card and 5-8 % less decode
-  ([bench.md](bench.md#lfm25-24b-optimized)).
+  (`bench.md#lfm25-24b-optimized`).
 
 ## Window
 
@@ -33,4 +33,4 @@ measured.
 1024, Qwen3.6's budget. Tuned by `bench-optimize` to stage 2 (2026-11-05): the halved ubatch's
 compute buffer pays for two expert layers on the card, the fastest decode measured at every depth
 for 35-40 % less prompt speed. Fit: 98 304 tokens in 104 s, 376 MiB free. The sweep, its fits and
-the speeds: [bench.md](bench.md#lfm25-24b-optimized). Logs: `runs/T-081-lfm25-opt/`.
+the speeds: `bench.md#lfm25-24b-optimized`. Logs: `runs/T-081-lfm25-opt/`.

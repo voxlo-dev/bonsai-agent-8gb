@@ -19,9 +19,25 @@ incomplete, and a change that contradicts one needs a new measurement, not an ar
 
 ## Current sprint
 
-None. The bench campaign runs without one, model by model: [`backlog/bench-campaign.md`](backlog/bench-campaign.md),
-each model tuned first by `bench-optimize`. This clone is the private fork (`origin` is its
-`bench.privateRemote`), so the campaign works on `main`.
+None. The bench campaign runs without one, model by model, on the private fork's `main`:
+`backlog/bench-campaign.md`, each model tuned first by `bench-optimize`.
+
+## Two repositories
+
+The public repo (`voxlo-dev/qwen-agent-8gb` on GitHub) is the upstream; a private fork adds what
+exists only there: `bench/`, `docs/bench.md`, `backlog/`, `artefacts/`, `.agents/skills/`,
+`scripts/git-hooks/` and `test/smoke/bench-*`. Those are the `paths` of
+`scripts/git-hooks/pre-push`, which refuses any commit touching them to a remote not in
+`bench.privateRemote`. Every other file is the same in both.
+
+- **A core change** (configurations, models, `las`, install, harness writers, docs but
+  `docs/bench.md`) is committed in a clone of the public repo, pushed there, and merged into the
+  fork. Its commits touch no private path, so the merge is clean.
+- **A core change made in the fork** goes the same way afterwards: cherry-picked into the public
+  clone, pushed, merged back; the identical change merges without conflict. A commit that mixes
+  both is split first.
+- **Shared files name a private path only as a code span**, never as a link, and say it is the
+  private fork's; a number from the bench names its run.
 
 ## Map
 
@@ -49,7 +65,7 @@ each model tuned first by `bench-optimize`. This clone is the private fork (`ori
 | `.agents/skills/bench-*` | Claude's procedures for the bench (T-060): `bench-run`, `bench-report`, `bench-add-task`, `bench-add-model` (also the new-architecture path), `bench-optimize`, each calling `bench/run.py` (`bench-optimize` also `llama-perplexity` and Strata). Linked into `.claude/skills/` by the user, since the sandbox cannot write there; the bench's pi never sees them (`--no-skills`) |
 | `test/smoke/las.sh` | `las list`, `las serve --print` for each engine, an environment value beating the configuration, both harness writers into a temp dir. Runs in the sandbox |
 | `test/smoke/bench-{attempt,run,generate,score}.sh` | One attempt of `bench/examples/hello` against the running server must pass; a run of hello, the chat example and the speed test with its own server must record all three, resume and report each kind, a second run reuse them, a third stop at a tiny budget; `bench-generate` draws the example family and `bench-score` checks budgets, malformed tool calls, score and rating on synthetic data, both in the sandbox |
-| `scripts/git-hooks/pre-push` | Refuses a push to any remote not in `bench.privateRemote` when a pushed commit touches `bench/tasks/`. Enabled per clone with `git config core.hooksPath scripts/git-hooks` |
+| `scripts/git-hooks/pre-push` | The list of private paths, and the hook refusing a push to any remote not in `bench.privateRemote` when a pushed commit touches one ([Two repositories](#two-repositories)). Enabled per clone with `git config core.hooksPath scripts/git-hooks` |
 
 ## Four things that bite
 

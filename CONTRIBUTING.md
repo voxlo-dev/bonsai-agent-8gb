@@ -71,23 +71,17 @@ you checked.
    and sits about 3x off what the card's memory bandwidth allows. A dedicated `mul_mat_vec` shader
    is the open piece.
 
-## The bench task set
+## The bench
 
-`bench/` measures local models on tasks with a hidden checker. The tasks themselves are not in the
-public repo, and pull requests adding tasks to it will be declined: a task that is published can
-be crawled into the next model's training data, and from then on the bench measures memory, not
-ability. The same goes for re-building a public benchmark - its tasks are already out there.
+The bench measures local models on tasks with a hidden checker, and it lives with its results in
+the maintainer's private fork, not here. Pull requests adding tasks will be declined: a task that
+is published can be crawled into the next model's training data, and from then on the bench
+measures memory, not ability. The same goes for re-building a public benchmark - its tasks are
+already out there. Tasks are the author's own or generated: Claude writes a generator per task
+family, a script draws the concrete instance from true randomness, and nobody reads it.
 
-Tasks are the author's own or generated: Claude writes a generator per task family, a script draws
-the concrete instance from true randomness, and nobody reads it - a skeleton Claude knows is a
-smaller risk than a task from the web, and the instance itself is seen by no model's training data
-(`bench/README.md#generated-tasks`).
-
-The maintainer's set lives in `bench/tasks/` in a private fork. `scripts/git-hooks/pre-push`
-refuses any push to a remote not named in `bench.privateRemote` when a commit in the pushed range
-touches `bench/tasks/`, history included; with no private remote configured it refuses all of
-them. Enable it once per clone ([`bench/README.md`](bench/README.md)). To use the bench, write
-your own tasks or families in the format of `bench/examples/` and keep them private the same way.
+This repo is the fork's upstream: everything but the bench is developed here and merged into the
+fork, and a number in `docs/` names the private run that measured it.
 
 ## What will probably be declined
 

@@ -1,7 +1,7 @@
 # Ornith-1.5-35B-A3B
 
 **Supported, offered at 32 GB beside Qwen3.6** ([README](../README.md#which-model)): tuned by
-`bench-optimize` to stage 2 and benched in tier 2 ([bench.md](bench.md#ornith-15-35b-in-tier-2)).
+`bench-optimize` to stage 2 and benched in tier 2 (`bench.md#ornith-15-35b-in-tier-2`).
 Never recommended over Qwen3.6, which stays the 32 GB default: Ornith is the better agent with less
 thinking and the only model here to pass the hallucination tasks, Qwen3.6 the better chat
 assistant, in German especially. Which one is a matter of taste.
@@ -40,7 +40,7 @@ it is Ornith's own, so a move of that pin re-tests Ornith with the Qwen models. 
 2048. Fit: 98 304 tokens in 113 s, 556 MiB free. 36 layers leaves 58 MiB, and nothing below starts
 at ubatch 2048 (the MTP context's compute buffer finds no room). Ubatch 1024 fits one layer more for
 prompts read ~1.5x slower, and no decode gain beyond one repeat's noise. Larger windows are
-untried: Qwen3.6's 262k needed V at q4_0. The sweep: [bench.md](bench.md#ornith-15-35b-optimized).
+untried: Qwen3.6's 262k needed V at q4_0. The sweep: `bench.md#ornith-15-35b-optimized`.
 Logs: `runs/T-082-ornith-opt/`.
 
 ## RAM

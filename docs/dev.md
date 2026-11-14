@@ -19,15 +19,15 @@ on 2026-10-03, T-047):
 | [kolibri1.md](kolibri1.md) | Kolibri-1: the patched mainline tree and its build number, settings, window by arithmetic, speed |
 | [context-window.md](context-window.md) | windows and KV quality for both models side by side |
 | [performance.md](performance.md) | Bonsai's bandwidth roofline, the optimizations tried and rejected; Qwen3.8-Flash's CPU experts |
-| [bench.md](bench.md) | bench results by question, with run ids: the campaign's tier tables |
-| [../bench/README.md](../bench/README.md) | the agent bench: task kinds and layout, generated tasks, attempts and verdicts, configurations and the fit check, runs, budgets, result reuse |
+| `bench.md` | private fork only: bench results by question, with run ids, the campaign's tier tables |
+| `../bench/README.md` | private fork only: the agent bench: task kinds and layout, generated tasks, attempts and verdicts, configurations and the fit check, runs, budgets, result reuse |
 
 ## New architectures
 
 A model no shipped tree runs gets its own `models/NAME.env` (the tree: `LLAMA_REPO`, `LLAMA_COMMIT`,
 `LLAMA_DIR`, `PATCH_DIR`, mainline by default), a configuration in `configs/`, and no installer
 entry: `MODEL_SUPPORT` defaults to `unsupported`, so `install.sh` and preflight leave it out, and
-`las list` marks it. The procedure is the `bench-add-model` skill's.
+`las list` marks it. The procedure is the private fork's `bench-add-model` skill.
 
 **The chat template.** The GGUF's own template is the default. `las check CONFIG` sends a request
 with one tool and checks for a well-formed `tool_calls` entry, then sends the result back and checks
@@ -38,7 +38,7 @@ template goes in `templates/` and the model file names it with `CHAT_TEMPLATE=te
 setup keys, so a changed template measures again. The model file's comment says why the template is
 there.
 
-Support is earned by a bench run: a model measured with results in [bench.md](bench.md) can be set
+Support is earned by a bench run: a model measured with results in `bench.md` can be set
 to `supported`, which puts it in the installer's RAM list.
 
 ## Old anchors

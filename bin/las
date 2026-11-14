@@ -144,7 +144,7 @@ serve_strata() {
   prepared="$(env STRATA_BIN="$STRATA_BIN" STRATA_VERSION="$STRATA_VERSION" STRATA_CONFIG="$STRATA_CONFIG" \
     STRATA_OVERRIDES="$STRATA_OVERRIDES" CTX="$CTX" MODEL_ALIAS="$MODEL_ALIAS" LISTEN_HOST="$LISTEN_HOST" \
     SERVER_HOST="$SERVER_HOST" PORT="$PORT" python3 "$ROOT/scripts/strata_config.py" prepare "$out")" \
-    || die "no Strata run config for $CONFIG - see docs/bench.md and bench/README.md#strata"
+    || die "no Strata run config for $CONFIG - see docs/agent.md#strata"
   run "$STRATA_BIN" serve --profile "$prepared" --host "$LISTEN_HOST" --port "$PORT" "${extra[@]}"
 }
 

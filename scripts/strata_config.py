@@ -2,7 +2,7 @@
 # The run config Strata serves for a configuration, shared by `las serve` and the bench: the
 # STRATA_CONFIG file `strata launch` wrote, with the alias, host and port of the configuration
 # and STRATA_OVERRIDES put back over it. `exact` also turns off every default of Strata that changes
-# the computation or the answer against llama-server (bench/README.md#strata); `las serve` leaves
+# the computation or the answer against llama-server (docs/agent.md#strata); `las serve` leaves
 # them on, as Strata ships them. The setting names are config.env's, read from `cfg` (a dict) or, on
 # the command line, from the environment. Needs the pinned Strata installed (STRATA_BIN).
 import json, os, pathlib, subprocess, sys
@@ -23,9 +23,9 @@ def overrides(cfg):
     try:
         over = json.loads(raw) if raw.strip() else {}
     except ValueError as e:
-        raise Refused(f"STRATA_OVERRIDES is not JSON ({e}) - see bench/README.md#strata") from e
+        raise Refused(f"STRATA_OVERRIDES is not JSON ({e}) - see docs/agent.md#strata") from e
     if not isinstance(over, dict):
-        raise Refused("STRATA_OVERRIDES must be a JSON object - see bench/README.md#strata")
+        raise Refused("STRATA_OVERRIDES must be a JSON object - see docs/agent.md#strata")
     return over
 
 
@@ -39,11 +39,11 @@ def prepare(cfg, out_path, exact):
     have = out.split()[1] if len(out.split()) > 1 else out.strip()
     if have != cfg["STRATA_VERSION"]:
         raise Refused(f"Strata {have} is installed, the pin is {cfg['STRATA_VERSION']} (STRATA_VERSION):"
-                      " move the pin only with a new measurement - see bench/README.md#strata")
+                      " move the pin only with a new measurement - see docs/agent.md#strata")
     src = pathlib.Path(cfg.get("STRATA_CONFIG") or "")
     if not src.is_file():
         raise Refused(f"no Strata run config at STRATA_CONFIG={str(src)!r} - write one with `strata launch`"
-                      " (bench-optimize stage 4)")
+                      " (docs/agent.md#strata)")
     run = json.loads(src.read_text())
     args = run.get("args", [])
     if "--max-context" in args:

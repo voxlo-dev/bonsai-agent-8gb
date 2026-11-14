@@ -328,6 +328,24 @@ Verified: the URL that `config.env` derives for local, remote and remote-with-po
 config written from it. Not yet run against a real remote server - the machine this was written on
 has no GPU.
 
+## Strata
+
+`ENGINE=strata` runs a configuration on [Strata](qwen38-flash.md#strata-a-dedicated-engine)
+instead of llama-server: the engine ISTA-DASLab's GSQ quants need. Strata is the user's install,
+never ours. `STRATA_CONFIG` names the run config of a launch preset,
+`~/.local/state/strata/launch/{preset}.json`, which carries its tuning (the VRAM reserve among it);
+the `install/strata-*.json` of Strata's first setup has none and does not start at 131k on 8 GB.
+Its GGUF, pack and engine flags are Strata's own, so only the harness config is ours.
+
+`scripts/strata_config.py` serves a copy of that run config with the configuration's alias, host
+and port, no API key and `fit_max_tokens` on (pi asks for 32 000 tokens whatever room is left, and
+gets a 400 without it). It refuses when the installed Strata is not `STRATA_VERSION` - the pin
+moves only with a new measurement - or the run config's `--max-context` is not `CTX`.
+`STRATA_OVERRIDES`, a JSON object, puts keys of the run config back (`"env"` merged). `las serve`
+keeps the approximations Strata ships with on: the route tail skip, `answer_room`,
+`tool_call_recovery`, `repeat_stop_tokens`, the reasoning recoveries. A measurement turns them off
+(`exact=True`), so it compares what llama-server would compute.
+
 ## Unsloth Studio
 
 `ENGINE=studio las serve CONFIG` opens the model the configuration names in [Unsloth Studio](https://github.com/unslothai/unsloth)

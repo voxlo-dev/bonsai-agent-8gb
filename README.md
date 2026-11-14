@@ -2,8 +2,8 @@
 
 **Docs and a bench for running coding-agent models on an ordinary 8 GB graphics card.** The card
 was never the limit: the RAM next to it decides how large a model it runs. This repo holds what
-was measured about that, the bench that measures it, and a launcher that starts any measured
-setup.
+was measured about that and a launcher that starts any measured setup; the bench that measures
+it is private.
 
 - **Configurations**: `configs/NAME.env` is a model plus its window, budget, KV cache and engine.
   The launcher serves one, the bench measures one.
@@ -11,9 +11,9 @@ setup.
   or [Unsloth Studio](https://github.com/unslothai/unsloth), checks its tool calls, and writes a
   ready-made config for the coding agents [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)
   and [opencode](https://opencode.ai). It installs neither.
-- **The bench** ([`bench/`](bench/README.md)): agent tasks (pi in a container, a hidden checker),
-  chat tasks and a speed test, over configurations x tasks x repeats, with an HTML dashboard.
-  Results: [docs/bench.md](docs/bench.md).
+- **The bench**: agent tasks (pi in a container, a hidden checker), chat tasks and a speed test,
+  over configurations x tasks x repeats. It and its results (`bench/`, `docs/bench.md`) live in
+  the maintainer's private fork, so its tasks stay out of training data; a number here names its run.
 - **The reasons**: every non-default setting answers a failure seen on real hardware, and the
   measurement behind it is in [`docs/`](docs/dev.md).
 
@@ -22,22 +22,22 @@ setup.
 Mixture-of-experts models only use a few billion parameters per token, so their experts can live
 in system RAM while the card holds the rest. More RAM, a bigger model. Each step below is a
 configuration the bench measured on an RTX 4060 Ti 8 GB with a Ryzen 7 7800X3D, native Linux, no
-display on the card ([docs/bench.md](docs/bench.md), one repeat each):
+display on the card (`docs/bench.md`, one repeat each):
 
 | RAM next to the card | Configuration | Engine | tok/s at 512 · 64k | Window | Agent · chat tasks |
 | --- | --- | --- | --- | --- | --- |
 | **any** | [Ternary-Bonsai-2-27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) PTQ1_0 (`bonsai`), dense, all on the card | llama.cpp (PrismML's fork) | 39 · 27 at 48k | 64k | 13/14 · 31/36 |
 | **16 GB** | [LFM2.5-24B-A2B](https://huggingface.co/LiquidAI/LFM2.5-24B-A2B) UD-Q4_K_XL (`lfm25-24b`) | llama.cpp | 62 · 49 | 131k | 9/14 · 32/36 |
 | **32 GB** | [Qwen3.6-35B-A3B](https://huggingface.co/Qwen/Qwen3.6-35B-A3B) UD-Q4_K_XL (`qwen36-35b`) | llama.cpp | 51 · 50 | 131k | 12/14 · 35/38 |
-| **64 GB** | [Qwen3.8-Flash-Next](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF) 125B, ISTA-DASLab's [GSQ-RCO IQ3_XXS](docs/bench.md#qwen38-flash-gsq-rco-iq3_xxs-optimized) (`qwen38-flash-gsq-iq3xxs-strata`) | Strata | 42 · 38 | 262k | 13/14 · 33/36 |
+| **64 GB** | [Qwen3.8-Flash-Next](https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF) 125B, ISTA-DASLab's GSQ-RCO IQ3_XXS (`qwen38-flash-gsq-iq3xxs-strata`) | Strata | 42 · 38 | 262k | 13/14 · 33/36 |
 
 **When quality counts more than speed**:
 
 - **32 GB, agent work:** [Flint](https://huggingface.co/RecursiveSI/flint) 40B-A2.5B UD-Q4_K_XL
-  (`flint`, llama.cpp, 51 · 36 tok/s, 131k, [14/14 · 23/36](docs/bench.md#flint-in-tier-2)): every
+  (`flint`, llama.cpp, 51 · 36 tok/s, 131k, 14/14 · 23/36): every
   agent task at Qwen3.6's speed, but weak at chat, worst in German - not a multilingual chat assistant.
 - **32 GB, lean agent:** [Ornith-1.5-35B-A3B](https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B)
-  Q4_K_M (`ornith-35b`, llama.cpp, 56 · 48 tok/s, 131k, [13/14 · 26/36](docs/bench.md#ornith-15-35b-in-tier-2)):
+  Q4_K_M (`ornith-35b`, llama.cpp, 56 · 48 tok/s, 131k, 13/14 · 26/36):
   a Qwen3.6 fine-tune that passes one agent task more with a third less thinking, and the only
   model here to pass the hallucination tasks; the weaker chat assistant, in German especially.
   Qwen3.6 or Ornith is a matter of taste.
@@ -49,8 +49,7 @@ display on the card ([docs/bench.md](docs/bench.md), one repeat each):
 two Strata configurations need [Strata](#strata) first. Other models run and bench like any
 configuration but are not offered until a bench run has measured them, such as
 Kolibri-1 ([details](docs/kolibri1.md)). A new model or
-architecture: the [`bench-add-model` skill](.agents/skills/bench-add-model/SKILL.md) and
-[docs/dev.md](docs/dev.md).
+architecture: [docs/dev.md](docs/dev.md).
 
 ## Install
 
@@ -119,7 +118,7 @@ one that runs ISTA-DASLab's GSQ quants as meant. It is not installed by this rep
 configuration names (`IQ3_XXS 256K` or `UD-IQ4_XS 128K Flash2`); its GGUF and engine are Strata's
 own. Preflight says what is missing. `las serve` then runs the preset with this repo's window,
 alias and port, with the approximations Strata ships with on
-([bench/README.md#strata](bench/README.md#strata)). Without Strata, `qwen38-flash` runs the same
+([docs/agent.md#strata](docs/agent.md#strata)). Without Strata, `qwen38-flash` runs the same
 model on llama.cpp.
 
 ## Configure
@@ -184,7 +183,7 @@ installs next to it with `CONFIG=bonsai ./install.sh` and runs with `las serve b
 
 Every non-default setting in this repo answers a failure seen on real hardware, and the
 measurement behind it is in [`docs/`](docs/dev.md). Speed, VRAM and windows are reproducible.
-Agent quality is measured by [the bench](bench/README.md); the early sessions were single runs on
+Agent quality is measured by the private bench; the early sessions were single runs on
 one prompt ([docs/agent-sessions.md](docs/agent-sessions.md)). The starting point was a study of
 eight local models as coding agents on an 8 GB card:
 [docs/model-comparison.md](docs/model-comparison.md).
