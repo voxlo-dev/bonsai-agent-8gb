@@ -5,51 +5,24 @@ Where a contributor or an AI agent starts. `README.md` is for people using this;
 
 ## What this repo is
 
-**Not an application.** The docs and the bench for running coding-agent models on an 8 GB card,
-and the bash that starts what they measure: it builds a patched llama.cpp, fetches a pinned GGUF,
+**Not an application.** The docs for running coding-agent models on an 8 GB card - a curated
+selection, each measured on real hardware - and the bash that starts them: it builds a patched llama.cpp, fetches a pinned GGUF,
 serves a **configuration** (`configs/NAME.env`) with `las` on llama-server, Strata or Unsloth
 Studio, and writes ready-made configs for the harnesses pi and opencode. Nothing here compiles into
-a product; the thing being assembled lives in `~/.local/share/local-agent-suite` (`LAS_HOME`). pi
-exists here only as the harness the bench measures, pinned in its image.
+a product; the thing being assembled lives in `~/.local/share/local-agent-suite` (`LAS_HOME`). No
+harness is installed by it.
 
 Which means the code is short and the **reasons are the product**. Every non-default choice - a
 flag, a cache type, a token count - answers a failure observed on real hardware, and that reason
 lives in `docs/` with the measurement behind it ([`docs/dev.md`](docs/dev.md) says where). A change without one is
 incomplete, and a change that contradicts one needs a new measurement, not an argument.
 
-## Current sprint
-
-None. The bench campaign runs without one, model by model, on the private fork's `main`:
-`backlog/bench-campaign.md`, each model tuned first by `bench-optimize`.
-
-## Two repositories
-
-`local-agent-suite` (private) is `las` in full: configurations for every model it measures, the
-bench that measures them, and later hardware past 8 GB. `qwen-agent-8gb` (public,
-`voxlo-dev/qwen-agent-8gb` on GitHub) is a curated selection of it for 8 GB cards: the Qwen
-models, LFM2.5 and Bonsai. The private repo is the upstream.
-
-- **Only in the private repo:** the bench and its planning - `bench/`, `docs/bench.md`, `backlog/`,
-  `artefacts/`, `.agents/skills/`, `scripts/git-hooks/`, `test/smoke/bench-*`, the `paths` of
-  `scripts/git-hooks/pre-push`, which refuses any commit touching them to a remote not in
-  `bench.privateRemote` - and the models the public one leaves out, with their configurations,
-  docs and patches.
-- **Different in each:** `README.md`, this file, the index in `docs/dev.md`, `RAMP_ALSO` in
-  `config.env`. The rest - `las`, the scripts, the harness writers, the shared models and their
-  docs - is the same in both.
-- **A change to what both share** is a commit of its own in the private repo, touching no private
-  path, cherry-picked into the public one (`git cherry-pick -x`); a fix arriving in the public one
-  comes back the same way. The two are never merged into each other: a merge carries one repo's
-  curation into the other.
-- **Shared files name a private path or model only as a code span**, never as a link; a number from
-  the bench names its run.
-
 ## Map
 
 | Path | Role |
 | --- | --- |
-| `config.env` | **Single source of truth.** Every setting, with `: "${VAR:=default}"` so an environment variable always wins. Resolves `CONFIG` (environment, else `$LAS_HOME/default.env`, else `qwen36-35b`), sources `configs/$CONFIG.env` (or `$CONFIG_FILE`, which the bench points at a run's snapshot), then `models/$MODEL.env`, then its defaults |
-| `configs/*.env` | One **configuration** each: `MODEL=`, the window and budget (`CTX`, `BUDGET`, `MAX_TOKENS`, `RESERVE_TOKENS`, `KEEP_RECENT_TOKENS`; for the MoE `CPU_MOE`, `UB`), `ENGINE=llama\|strata\|studio`, anything else a campaign candidate varies. Self-contained: a variant repeats the base values. `{model}` is the card driving no display, `{model}-display` one that does, `-vulkan` the AMD path, the rest bench candidates. `las`, the bench (`--config`, `fit`) and the harness writers all resolve a name here |
+| `config.env` | **Single source of truth.** Every setting, with `: "${VAR:=default}"` so an environment variable always wins. Resolves `CONFIG` (environment, else `$LAS_HOME/default.env`, else `qwen36-35b`), sources `configs/$CONFIG.env` (or `$CONFIG_FILE`), then `models/$MODEL.env`, then its defaults |
+| `configs/*.env` | One **configuration** each: `MODEL=`, the window and budget (`CTX`, `BUDGET`, `MAX_TOKENS`, `RESERVE_TOKENS`, `KEEP_RECENT_TOKENS`; for the MoE `CPU_MOE`, `UB`), `ENGINE=llama\|strata\|studio`, anything else a variant changes. Self-contained: a variant repeats the base values. `{model}` is the card driving no display, `{model}-display` one that does, `-vulkan` the AMD path. `las` and the harness writers resolve a name here |
 | `models/{bonsai,qwen36-35b,qwen38-flash,lfm25-24b}.env` | Per `MODEL`: `MODEL_SUPPORT` (`supported` or `unsupported`, only a supported one's configurations join the ramp), the GGUF pin, the llama.cpp tree that runs it (`LLAMA_*`, `PATCH_DIR`), `CHAT_TEMPLATE` (a file under `templates/`), KV types, sampling, `EFFORT`, `SPEC_TYPE`, the vision projector (`MMPROJ_*`), a drafter shipped as its own GGUF (`DRAFT_*`), what preflight checks (`MODEL_DISK_MB`, `MODEL_RAM_MB`, backends) and how the ramp shows it (`MODEL_TITLE`, `MODEL_ROLE`, a configuration may set its own); `SERVER_ARGS` for flags no setting covers. No window or budget |
 | `models/trees/unsloth.env` | Unsloth's llama.cpp pin, sourced by both Qwen model files on CUDA since they share its build dir. Not a model: nothing reads `models/trees/` as one |
 | `templates/` | Chat template files a model file names with `CHAT_TEMPLATE`, passed as `--chat-template-file` and part of the fit and setup keys. Empty until a model's own template fails `las check` |
@@ -59,17 +32,13 @@ models, LFM2.5 and Bonsai. The private repo is the upstream.
 | `scripts/{deps,build,model}.sh` | One install step each, individually re-runnable and idempotent. `deps` and `build` branch on `BACKEND` (`cuda`, `vulkan`); `build` fetches a git commit, or a checksummed release tarball (`LLAMA_TARBALL`) where the commit is not fetchable (Unsloth's tree) |
 | `bin/las` | The launcher, the only command. `serve [--print] [CONFIG] [-- args]` starts the configuration in the foreground on its `ENGINE`; `list`; `check CONFIG` (the tool-call round-trip, `scripts/check_tools.py`); `harness pi\|opencode CONFIG [--dir DIR]`; `launch pi\|opencode [CONFIG] [-- args]` (that config, the server in the background unless it runs, the harness from `PATH`, the server stopped by the last session). Without a configuration named or recorded, `serve` and `launch` take the ramp's pick for the RAM. Starts nothing it was not asked to start and installs no harness |
 | `scripts/server-flags.sh` | The llama-server flags and environment of the selected configuration, sourced by `las serve`. Long spellings only: Unsloth Studio's parser misreads short clusters |
-| `scripts/strata_config.py` | Prepares a Strata run config (`prepare(cfg, out, exact)`, `overrides(cfg)`) for `las serve` (approximations on, as Strata ships them) and the bench (`exact=True`, approximations off) |
+| `scripts/strata_config.py` | Prepares a Strata run config (`prepare(cfg, out, exact)`, `overrides(cfg)`) for `las serve` (approximations on, as Strata ships them) and for a measurement (`exact=True`, approximations off) |
 | `scripts/check_tools.py` | The `las check` round-trip against `SERVER_URL`, stdlib only; a failure names the step (request, tool_calls, arguments, result, answer) |
-| `harness/{pi,opencode}.py` | Write a harness's config for a configuration: pi's `models.json`, `settings.json` with the compaction budget, `AGENTS.md`, pi-bg-bash; opencode's `opencode.json`. Used by `las harness` and, for pi, by the bench for its container. Neither installs the harness |
+| `harness/{pi,opencode}.py` | Write a harness's config for a configuration: pi's `models.json`, `settings.json` with the compaction budget, `AGENTS.md`, pi-bg-bash; opencode's `opencode.json`. Used by `las harness`. Neither installs the harness |
 | `harness/pi/AGENTS.md` | The agent prompt `harness/pi.py` copies into pi's config dir. **Not this file** |
-| `patches/{backend}/*.patch` | Applied by `build` to the fork at `LLAMA_COMMIT`, in name order, for that backend only, and only for a model whose `PATCH_DIR` names them (Bonsai). Today: the PTQ1_0 Vulkan `mul_mm` loader, +35 % on prompts, until upstream takes it (T-017) |
-| `patches/unsloth/*.patch` | Applied the same way to Unsloth's tree (`models/trees/unsloth.env`), so both Qwen models build with it: Qwen3.8-Flash's sparse attention at decode attends over the selected cells instead of the whole cache (T-051, T-053) |
-| `bench/` | The agent bench (T-055 to T-065): agent tasks (pi in a container, a hidden checker), chat tasks (one prompt to the server, graded by rules) and the speed test (`speed/`, tok/s and VRAM at depth), one module each in `lib/kinds/`. `templates/` holds a blank task per kind (`run.py new`), and `run.py generate` draws tasks from a family under `tasks/_gen/`, `run.py validate` proves a task before `plan` and `run` let it count. `image.sh` builds the image every agent attempt runs in (it pins pi with `PI_VERSION`, and pi-bg-bash with `PI_BG_BASH_*`), `run.py attempt` runs one task, `run.py plan`/`run` a resumable run of configurations x tasks x repeats with `report` and `compare`, reusing every result of an unchanged setup across runs and giving each task a token budget from `budget.toml`, `run.py dashboard` writes every run into one interactive HTML page (`lib/dashboard.html`) beside public benchmark scores (`public.toml` by hand, `public-aa.json` from `run.py public`), `run.py watch` follows it live in the author's terminal (it prints task content, so never an agent's call on `tasks/`). A run measures configurations from `configs/` (by name, `--config`); its server is `las serve`, or Strata prepared by `scripts/strata_config.py`, started, fit-checked and stopped by the runner. `bench/README.md` says how. `tasks/` is the private task set, the author's or generated: an agent writes generators and runs `generate`, but never reads an instance or its validation logs, nor a task but one handed over for formatting, never pushes to a public remote. `examples/` is public, format only. Runs outside the Claude sandbox |
-| `.agents/skills/bench-*` | Claude's procedures for the bench (T-060): `bench-run`, `bench-report`, `bench-add-task`, `bench-add-model` (also the new-architecture path), `bench-optimize`, each calling `bench/run.py` (`bench-optimize` also `llama-perplexity` and Strata). Linked into `.claude/skills/` by the user, since the sandbox cannot write there; the bench's pi never sees them (`--no-skills`) |
+| `patches/{backend}/*.patch` | Applied by `build` to the fork at `LLAMA_COMMIT`, in name order, for that backend only, and only for a model whose `PATCH_DIR` names them (Bonsai). Today: the PTQ1_0 Vulkan `mul_mm` loader, +35 % on prompts, until upstream takes it |
+| `patches/unsloth/*.patch` | Applied the same way to Unsloth's tree (`models/trees/unsloth.env`), so both Qwen models build with it: Qwen3.8-Flash's sparse attention at decode attends over the selected cells instead of the whole cache |
 | `test/smoke/las.sh` | `las list`, `las serve --print` for each engine, an environment value beating the configuration, both harness writers into a temp dir. Runs in the sandbox |
-| `test/smoke/bench-{attempt,run,generate,score}.sh` | One attempt of `bench/examples/hello` against the running server must pass; a run of hello, the chat example and the speed test with its own server must record all three, resume and report each kind, a second run reuse them, a third stop at a tiny budget; `bench-generate` draws the example family and `bench-score` checks budgets, malformed tool calls, score and rating on synthetic data, both in the sandbox |
-| `scripts/git-hooks/pre-push` | The list of private paths, and the hook refusing a push to any remote not in `bench.privateRemote` when a pushed commit touches one ([Two repositories](#two-repositories)). Enabled per clone with `git config core.hooksPath scripts/git-hooks` |
 
 ## Four things that bite
 
@@ -77,8 +46,7 @@ models, LFM2.5 and Bonsai. The private repo is the upstream.
 `harness/*.py`, a config file written for a harness. They drift silently: the server takes its
 values at start, the harness keeps a written copy. After changing `CTX`, `SERVER_HOST`, `PORT`,
 `MAX_TOKENS`, `RESERVE_TOKENS`, `KEEP_RECENT_TOKENS` or `VISION`, `las harness pi CONFIG` (or
-`opencode`) must run again, with the same configuration. The bench rewrites its own pi config per
-run, so only a hand-written one goes stale.
+`opencode`) must run again, with the same configuration.
 
 **The context budget is arithmetic, not taste.** `CTX`, `BUDGET`, `MAX_TOKENS`, `RESERVE_TOKENS`
 and `KEEP_RECENT_TOKENS` constrain each other, which is why they live in one configuration and move
@@ -109,23 +77,22 @@ Unversioned: the repo pins what matters instead. Each step checks whether its wo
 exits early, so a second run is cheap and says so.
 
 **There is no test suite** for the install scripts: it is bash, there is no framework, and what
-breaks is behaviour under a real model on a real card. Verify by observation. The bench is the
-exception, with smoke scripts in `test/smoke/`: it has a deterministic happy path.
+breaks is behaviour under a real model on a real card. Verify by observation. The launcher is the
+exception, with `test/smoke/las.sh`: it has a deterministic happy path.
 
 | Change | How to see it worked |
 | --- | --- |
 | Any script | `bash -n`, and run the step twice to confirm it is still idempotent |
 | `las`, `config.env`, a configuration | `test/smoke/las.sh` (sandbox): `list`, `serve --print` per engine, precedence, both harness writers |
-| The bench | `test/smoke/bench-attempt.sh` with the server running, `test/smoke/bench-run.sh` without; both outside the sandbox. `bench-generate.sh` and `bench-score.sh` inside it |
 | Preflight | run it where it should fail (no GPU, wrong `BACKEND`, too little disk): one screen, nothing touched |
 | Server flags | `las serve --print CONFIG`, then start it, query `http://127.0.0.1:8080/props`, or render a conversation through `/apply-template` |
-| A window, a configuration, a tree or a build flag | `run.py fit` on a bench configuration of it: one prompt to `CTX - RESERVE_TOKENS` in full ubatches, `nvidia-smi` alongside. A window that loads is not a window that holds: the CUDA pool grows outside the reserved buffers. Its speed: a run of `--tasks speed`, `compare`d with the one before (`bench/README.md#speed-test`); a number in `docs/` names its run |
+| A window, a configuration, a tree or a build flag | one prompt filling `CTX - RESERVE_TOKENS`, `nvidia-smi` alongside, and the server still up afterwards. A window that loads is not a window that holds: the CUDA pool grows outside the reserved buffers. Its speed: generation and prompt tok/s at a stated depth, against the number in `docs/` |
 | Vulkan kernels | generation and an ~850-token prompt at a stated window, judged by tok/s. VRAM is misleading: RADV only reports it meaningfully after the first request |
 | A harness config | `las harness pi CONFIG --dir $TMPDIR/x`, read back `models.json` and `settings.json` (opencode: `opencode.json`) |
 | A new architecture | `las check CONFIG` against the running server: it names the failing step |
-| pi's behaviour | its session logs, JSONL under `$LAS_HOME/bench/pi-agent-{config}/sessions/{cwd-slug}/`, one entry per message with `usage` counts and `compaction` records. That is where a context problem is visible |
+| pi's behaviour | its session logs, JSONL under `sessions/{cwd-slug}/` in the config dir `las harness pi` wrote (default `$LAS_HOME/harness/pi/{config}/`), one entry per message with `usage` counts and `compaction` records. That is where a context problem is visible |
 
-A long measurement gets a folder under `runs/{ticket}-{slug}/` with its script and log. `runs/` is
+A long measurement gets a folder under `runs/{slug}/` with its script and log. `runs/` is
 gitignored but kept, so a result stays readable after the session that produced it; the conclusion
 belongs in `docs/`.
 
@@ -158,11 +125,6 @@ Every fact has one home, chosen by how long it stays true.
 | `docs/performance.md` | durable | what limits generation speed: the bandwidth roofline, and the optimizations tried and rejected |
 | `docs/context-window.md` | durable | the window and the KV cache for both models: what fits on 8 GB, the silent WSL2 spill, KV quality against f16 |
 | `docs/localagent.md` | durable | **Frozen**: the localagent workflow, whose code is no longer in this repo: why it was not recommended, its shape, the measured runs |
-| `docs/model-comparison.md` | durable | eight local models as coding agents on 8 GB, from the study predating this repo. **Frozen**: a record of finished work. New measurements go to the file that holds the topic, or a ticket |
-| `backlog/` | living | one file per ticket, `T-NNN-{slug}.md`, indexed in `backlog.md` with the `Next ticket` counter. A private one gets `.local.md` and stays out of the repo, so the numbers have gaps |
-| `artefacts/{sprint}/` | living until the sprint closes | the sprint file: goal, non-goals, decisions, and the board indexing its tickets |
+| `docs/model-comparison.md` | durable | eight local models as coding agents on 8 GB, from the study predating this repo. **Frozen**: a record of finished work. New measurements go to the file that holds the topic |
 | `runs/` | ephemeral | gitignored but kept: one folder per long measurement |
 | `.temp/` | ephemeral | gitignored scratch, safe to delete at any time |
-
-Closing a ticket means its result is in `docs/` and its file is deleted. Nothing is left behind as
-a note.
