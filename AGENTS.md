@@ -24,20 +24,25 @@ None. The bench campaign runs without one, model by model, on the private fork's
 
 ## Two repositories
 
-The public repo (`voxlo-dev/qwen-agent-8gb` on GitHub) is the upstream; a private fork adds what
-exists only there: `bench/`, `docs/bench.md`, `backlog/`, `artefacts/`, `.agents/skills/`,
-`scripts/git-hooks/` and `test/smoke/bench-*`. Those are the `paths` of
-`scripts/git-hooks/pre-push`, which refuses any commit touching them to a remote not in
-`bench.privateRemote`. Every other file is the same in both.
+`local-agent-suite` (private) is `las` in full: configurations for every model it measures, the
+bench that measures them, and later hardware past 8 GB. `qwen-agent-8gb` (public,
+`voxlo-dev/qwen-agent-8gb` on GitHub) is a curated selection of it for 8 GB cards: the Qwen
+models, LFM2.5 and Bonsai. The private repo is the upstream.
 
-- **A core change** (configurations, models, `las`, install, harness writers, docs but
-  `docs/bench.md`) is committed in a clone of the public repo, pushed there, and merged into the
-  fork. Its commits touch no private path, so the merge is clean.
-- **A core change made in the fork** goes the same way afterwards: cherry-picked into the public
-  clone, pushed, merged back; the identical change merges without conflict. A commit that mixes
-  both is split first.
-- **Shared files name a private path only as a code span**, never as a link, and say it is the
-  private fork's; a number from the bench names its run.
+- **Only in the private repo:** the bench and its planning - `bench/`, `docs/bench.md`, `backlog/`,
+  `artefacts/`, `.agents/skills/`, `scripts/git-hooks/`, `test/smoke/bench-*`, the `paths` of
+  `scripts/git-hooks/pre-push`, which refuses any commit touching them to a remote not in
+  `bench.privateRemote` - and the models the public one leaves out, with their configurations,
+  docs and patches.
+- **Different in each:** `README.md`, this file, the index in `docs/dev.md`, `RAMP_ALSO` in
+  `config.env`. The rest - `las`, the scripts, the harness writers, the shared models and their
+  docs - is the same in both.
+- **A change to what both share** is a commit of its own in the private repo, touching no private
+  path, cherry-picked into the public one (`git cherry-pick -x`); a fix arriving in the public one
+  comes back the same way. The two are never merged into each other: a merge carries one repo's
+  curation into the other.
+- **Shared files name a private path or model only as a code span**, never as a link; a number from
+  the bench names its run.
 
 ## Map
 
