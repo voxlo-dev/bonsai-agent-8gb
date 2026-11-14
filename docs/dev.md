@@ -14,9 +14,6 @@ on 2026-10-03, T-047):
 | [qwen36.md](qwen36.md) | Qwen3.6-35B-A3B: why a MoE, the offload/MTP grid, profiles, RX 570, native Linux, the Unsloth tree, vision |
 | [qwen38-flash.md](qwen38-flash.md) | Qwen3.8-Flash-Next: every expert in RAM, flags, window, native Linux, decode at depth and its patches, Strata, vision |
 | [lfm25.md](lfm25.md) | LFM2.5-24B-A2B: the first new architecture, its tree, settings and window |
-| [flint.md](flint.md) | Flint Preview: its own mainline tree, f16 KV, window, RAM, the unpatched pool1d kernel |
-| [ornith.md](ornith.md) | Ornith-1.5-35B-A3B: a Qwen3.6 fine-tune on Qwen3.6's tree, its template, window, RAM |
-| [kolibri1.md](kolibri1.md) | Kolibri-1: the patched mainline tree and its build number, settings, window by arithmetic, speed |
 | [context-window.md](context-window.md) | windows and KV quality for both models side by side |
 | [performance.md](performance.md) | Bonsai's bandwidth roofline, the optimizations tried and rejected; Qwen3.8-Flash's CPU experts |
 | `bench.md` | private fork only: bench results by question, with run ids, the campaign's tier tables |

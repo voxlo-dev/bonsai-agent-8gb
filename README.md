@@ -1,6 +1,7 @@
-# Local Agent Suite
+# qwen-agent-8gb
 
-**Docs and a bench for running coding-agent models on an ordinary 8 GB graphics card.** The card
+**Coding-agent models for an ordinary 8 GB graphics card, a curated selection: the Qwen models,
+LFM2.5 and Bonsai.** The card
 was never the limit: the RAM next to it decides how large a model it runs. This repo holds what
 was measured about that and a launcher that starts any measured setup; the bench that measures
 it is private.
@@ -33,23 +34,13 @@ display on the card (`docs/bench.md`, one repeat each):
 
 **When quality counts more than speed**:
 
-- **32 GB, agent work:** [Flint](https://huggingface.co/RecursiveSI/flint) 40B-A2.5B UD-Q4_K_XL
-  (`flint`, llama.cpp, 51 · 36 tok/s, 131k, 14/14 · 23/36): every
-  agent task at Qwen3.6's speed, but weak at chat, worst in German - not a multilingual chat assistant.
-- **32 GB, lean agent:** [Ornith-1.5-35B-A3B](https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B)
-  Q4_K_M (`ornith-35b`, llama.cpp, 56 · 48 tok/s, 131k, 13/14 · 26/36):
-  a Qwen3.6 fine-tune that passes one agent task more with a third less thinking, and the only
-  model here to pass the hallucination tasks; the weaker chat assistant, in German especially.
-  Qwen3.6 or Ornith is a matter of taste.
 - **64 GB:** Qwen3.8-Flash on UD-IQ4_XS (`qwen38-flash-strata-dflash2`, Strata, 30 · 26 tok/s, 131k,
   14/14 · 35/39). It also runs without Strata, on this repo's llama.cpp (`qwen38-flash`, ~19 tok/s,
   not benched in tier 1).
 
-`./install.sh` reads your RAM, offers these eight and recommends the largest step that fits; the
-two Strata configurations need [Strata](#strata) first. Other models run and bench like any
-configuration but are not offered until a bench run has measured them, such as
-Kolibri-1 ([details](docs/kolibri1.md)). A new model or
-architecture: [docs/dev.md](docs/dev.md).
+`./install.sh` reads your RAM, offers these six and recommends the largest step that fits; the
+two Strata configurations need [Strata](#strata) first. A new model or architecture:
+[docs/dev.md](docs/dev.md).
 
 ## Install
 
